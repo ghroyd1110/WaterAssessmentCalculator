@@ -1,0 +1,3302 @@
+---
+title: "Water Project"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: lumen # https://github.com/rstudio/shinythemes
+    vertical_layout: fill    
+    horizontal_layout: fill
+    logo: adeq_logo_wht.png
+    social: menu
+runtime: shiny
+---
+
+---
+title: "DB: Contact information"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+<style> 
+
+.navbar {
+  background-color:#5c8985;
+  border-color:black;
+  font-weight:bold;
+}
+.navbar-brand {
+color:white!important;
+}
+
+.navbar-nav {
+  color: white;
+}
+
+</style>   
+
+
+```{r load_packages, message=FALSE, echo=FALSE}
+
+library(rmarkdown)
+library(tidyverse)
+library(readxl)
+library(psych)
+library(stringr)
+library(data.table)
+library(DT)
+library(shiny)
+library(plotly)
+library(flexdashboard)
+library(lubridate)
+
+options(error = traceback)
+
+options(warn=-1)
+
+# This way DT fills full container in Dashboard but starts vertical scroll if goes beyond 100%(v)iew(h)eight of container
+options(DT.options = list(scrollY="100vh"))
+
+
+```
+
+```{r load_functions, warning=TRUE, echo=FALSE, message=FALSE}
+
+source("water/RCode/functions/01 f_convert_criteria_stnds_to_long 2019 01 22.R")
+source("water/RCode/functions/02 f_result_dependent_coefficients 2019 03 01.R")
+source("water/RCode/functions/03 f_unit_conversion 2019 04 06.R")
+source("water/RCode/functions/04 f_non_detect_units 2019 02 10.R")
+source("water/RCode/functions/05 f_remove_DO_gt_1m 2019 01 12.R")
+source("water/RCode/functions/06 f_dissolved_total_exclusions 2019 04 13.R")
+
+source("water/RCode/functions/10 f_hardness 2019 02 25.R")
+source("water/RCode/functions/11 f_temperature 2019 02 25.R")
+source("water/RCode/functions/12 f_pH 2019 02 25.R")
+source("water/RCode/functions/14 f_ammonia 2019 02 27.R")
+source("water/RCode/functions/15 f_nitrogen 2019 02 28.R")
+source("water/RCode/functions/16 f_negative_log_10_mean.R")
+
+source("water/RCode/functions/20 f_non_detect 2019 03 06.R")
+source("water/RCode/functions/21 f_agg_reps 2019 02 24.R")
+source("water/RCode/functions/22 f_dissolved_gt_110_percent_total 2019 04 14.R")
+source("water/RCode/functions/23 f_non_detect_simple 2019 04 11.R")
+source("water/RCode/functions/24 f_remove_dissolved_total_reps 2019 04 14.R")
+
+source("water/RCode/functions/30 f_temp_ind_agg_typical_parameters 2019 03 09.R")
+source("water/RCode/functions/31 f_temp_ind_agg_acute_ammonia 2019 04 07.R")
+source("water/RCode/functions/32 f_temp_ind_agg_chronic_ammonia 2019 04 07.R")
+source("water/RCode/functions/33 f_temp_ind_agg_acute_metals 2019 04 07.R")
+source("water/RCode/functions/34 f_temp_ind_agg_chronic_metals 2019 04 08.R")
+
+source("water/RCode/functions/105 f_stnd_exceed 2019 03 07.R")
+source("water/RCode/functions/110 f_adjust_tolerances 2019 03 13.R")
+source("water/RCode/functions/112 f_core_seasonal 2019 03 13.R")
+source("water/RCode/functions/113 f_core_seasonal 3YR 2019 04 06.R")
+
+source("water/RCode/functions/115 f_ann_mean 2019 03 14.R")
+source("water/RCode/functions/116 f_geo_mean 2019 04 06.R")
+source("water/RCode/functions/117A f_calc_90_percentile 2019 03 16.R")
+source("water/RCode/functions/117B f_90_percentile 2019 04 06.R")
+source("water/RCode/functions/118 f_median 2019 04 06.R")
+source("water/RCode/functions/120 f_binomial 2019 04 11.R")
+source("water/RCode/functions/130 f_impair 2019 03 17.R")
+source("water/RCode/functions/140 f_core 2019 03 17.R")
+source("water/RCode/functions/141 f_no_exceed_x_yrs 2019 04 17.R")
+source("water/RCode/functions/142 f_max_exceed 2019 04 06.R")
+
+source("water/RCode/functions/150 f_impair_worst_case 2019 04 11.R")
+source("water/RCode/functions/151 f_impair_DO_special_case 2019 04 11.R")
+source("water/RCode/functions/160 f_attain_e_coli_special_case 2019 04 11.R")
+source("water/RCode/functions/162 f_attain_worst_case 2019 04 11.R")
+
+```
+
+```{r import_and_filter_data_1, warning=TRUE, echo=FALSE, message=FALSE}
+
+start_time <- Sys.time()
+
+#--------------
+# @@@ EPA Data:  
+# -------------
+
+# Sampling_Activity Sampling_Activity_Metrics Sample_results_chemical Project_data Site_data_only Result_Detection_Quantitation_Limit_Data
+act_i <- do.call(rbind, lapply(list.files("water/rds/Sampling_Activity/", full.names = TRUE), readRDS)) 
+count_1 <- nrow(act_i)
+
+act <- act_i %>%
+      dplyr::filter(OrganizationIdentifier %in% c("USGS-AZ", "AZDEQ_SW")) %>% 
+      
+      # Change 'ActivityStartDate' column to type Date for join within test_results
+      dplyr::mutate(ActivityStartDate = ymd(ActivityStartDate))
+
+# Sampling_Activity Sampling_Activity_Metrics Sample_results_chemical Project_data Site_data_only Result_Detection_Quantitation_Limit_Data
+metrics <- do.call(rbind, lapply(list.files("water/rds/Sampling_Activity_Metrics/", full.names = TRUE), readRDS)) 
+count_2 <- nrow(metrics)
+
+```
+
+```{r import_and_filter_data_2, warning=TRUE, echo=FALSE, message=FALSE}
+# Sampling_Activity Sampling_Activity_Metrics Sample_results_chemical Project_data Site_data_only Result_Detection_Quantitation_Limit_Data
+proj_i <- do.call(rbind, lapply(list.files("water/rds/Project_data/", full.names = TRUE), readRDS)) 
+count_3 <- nrow(proj_i)
+
+proj <- proj_i %>%
+      dplyr::filter(OrganizationIdentifier %in% c("USGS-AZ", "AZDEQ_SW")) %>% 
+      
+      # Retain these four columns
+      dplyr::select(OrganizationIdentifier, ProjectIdentifier, ProjectName, ProjectDescriptionText)
+      
+# Sampling_Activity Sampling_Activity_Metrics Sample_results_chemical Project_data Site_data_only Result_Detection_Quantitation_Limit_Data
+sites_i <- read.csv("water/epa_archive/Site_data_only.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+count_4 <- nrow(sites_i)
+
+sites <- sites_i %>%
+      dplyr::filter(OrganizationIdentifier %in% c("USGS-AZ", "AZDEQ_SW")) %>% 
+      
+      # Further filter the test results to only Streams and Lakes
+      dplyr::filter(MonitoringLocationTypeName %in% c("Stream", "Lake", "River/Stream", "Lake, Reservoir, Impoundment"))
+
+```
+
+```{r import_and_filter_data_3, warning=TRUE, echo=FALSE, message=FALSE}
+# Sampling_Activity Sampling_Activity_Metrics Sample_results_chemical Project_data Site_data_only Result_Detection_Quantitation_Limit_Data
+lims_i <- do.call(rbind, lapply(list.files("water/rds/Limit_Data/", full.names = TRUE), readRDS)) 
+count_5 <- nrow(lims_i)
+
+lims <- lims_i %>%
+      dplyr::filter(OrganizationIdentifier %in% c("USGS-AZ", "AZDEQ_SW"))
+
+# Sampling_Activity Sampling_Activity_Metrics Sample_results_chemical Project_data Site_data_only Result_Detection_Quantitation_Limit_Data
+chem_i <- do.call(rbind, lapply(list.files("water/rds/Sample_results_chemical/", full.names = TRUE), readRDS)) 
+count_6 <- nrow(chem_i)
+
+chem <- chem_i %>%
+      dplyr::filter(OrganizationIdentifier %in% c("USGS-AZ", "AZDEQ_SW")) %>%
+      dplyr::filter(!(ResultDetectionConditionText == "Not Reported")) %>% 
+      
+      # Change all CharacteristicName entries to upper case
+      dplyr::mutate(CharacteristicName = toupper(CharacteristicName)) %>%
+      
+      # Convert to type Date
+      dplyr::mutate(ActivityStartDate = ymd(ActivityStartDate)) %>%
+
+      # Change the 'CharacteristicName' column to all uppercase
+      dplyr::mutate(CharacteristicName = toupper(CharacteristicName)) %>%
+      
+      # USGS-AZ test samples record as "OXYGEN" as opposed to AZDEQ_SW as "DISSOLVEd OXYGEN (DO)".  Overwriting each case of 'Oxygen' for CharacteristicName and 'Dissolved' for ResultSampleFractionText 
+      dplyr::mutate(CharacteristicName = if_else(CharacteristicName == "OXYGEN" & ResultSampleFractionText == "Dissolved" & ResultMeasure.MeasureUnitCode == "mg/l", "DISSOLVED OXYGEN (DO)", CharacteristicName)) %>%
+      dplyr::mutate(CharacteristicName = if_else(CharacteristicName == "OXYGEN" & ResultSampleFractionText == "Dissolved" & ResultMeasure.MeasureUnitCode == "% saturatn", "DISSOLVED OXYGEN SATURATION", CharacteristicName))
+
+#---------------
+# @@@ ADEQ Data
+#---------------
+
+usgs_du <- read.csv("water/az_views/huc_usgs.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE) %>%
+      dplyr::select(-X)
+
+colnames(usgs_du) <- toupper(colnames(usgs_du))
+count_7 <- nrow(usgs_du)
+
+# Convert the Nutrients column to a Designated Use (DU) and embed it in the DU column like a regular designated use. 
+nutrients_reach <- usgs_du %>% dplyr::filter(NUTRIENT != "") %>%
+      dplyr::select(-DU) %>%
+      dplyr::rename(DU = NUTRIENT) %>%
+      unique()
+
+usgs_du <- usgs_du %>% dplyr::select(-NUTRIENT)
+usgs_du <- rbind(usgs_du, nutrients_reach)
+
+
+
+azdeq_du_i <- read.csv("water/az_views/designated_use.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+count_8 <- nrow(azdeq_du_i)
+
+azdeq_du <- azdeq_du_i %>%
+      dplyr::select(-X) %>% dplyr::filter(!(designated_use %in% c("Standard", "Impaired", "Tributary", "OAW"))) %>%
+      
+      # Remove any letters attached to the huc_cd entries; one azdeq HUC has a ninth character attached but it only exists in their system.  Hence, when we join the designated use data to the EPA test samples, these hucs are not found and thus, removed.  
+      dplyr::mutate(huc_cd = gsub('[A-Z]+', '', huc_cd))
+
+
+
+# Create a Tribal column to tag WBIDs as Tribal or not, and if so, why they were tagged as tribal.
+
+huc_reach <- read.csv("water/az_views/huc_reach.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE) 
+count_9 <- nrow(huc_reach)
+
+huc_reach <- huc_reach %>%
+
+   # For HUC 15060106, ADEQ adds an A or a B to this HUC.  Strip off the A and B for each case so that we can join properly to our test results.  
+  dplyr::mutate(huc_clean = gsub('[A-Z]+', '', huc)) %>% 
+  dplyr::select(-X) %>%
+  dplyr::mutate(vw_WBID = paste(huc_clean, reach, sep = "-")) %>%
+  dplyr::mutate(vw_Tribal_Tag = ifelse(stringr::str_sub(reach, start = -1) == "I", "Y_I", 
+                                ifelse(swqs_name == "Not Assigned", "Y_NA",
+                                       "N"))) %>%
+
+  # Remove the "-I" from any 'reach' ending in "-I" for joining to test samples later
+  dplyr::mutate(reach_2 = stringr::str_replace(reach, "[-I]", "")) %>%
+      
+  # Remove the "-" from any 'WBID 'reach' ending in an "I", "-I", and "-"; This WBID is to keep the original in case they want it later.  
+  dplyr::mutate(reach_2 = stringr::str_replace(reach_2, "[I]", "")) %>%
+  dplyr::mutate(reach_2 = stringr::str_replace(reach_2, "[-]", "")) %>%
+  dplyr::mutate(WBID = paste(huc, reach_2, sep = "-")) %>%
+  dplyr::rename(vw_watershed = watershed, vw_swqs_name = swqs_name, vw_huc = huc, vw_reach = reach) %>%
+      
+  # Look at the results and check for inaccurate data
+  dplyr::select(vw_Tribal_Tag, vw_WBID, vw_huc, vw_reach, vw_watershed, vw_swqs_name, WBID, everything()) 
+
+# Create the data set that will be joined to our test samples; we are adding Tribal_Tag, vw_WBID, vw_watershed, and vw_swqs_name to our samples
+huc_reach_join <- huc_reach %>% dplyr::select(vw_Tribal_Tag, vw_WBID, vw_huc, vw_reach, vw_watershed, vw_swqs_name, WBID) %>% unique()
+
+
+# Create a data frame that has WBID alongside Lake Acres and Reach Distance data 
+ref_waterbody <- read_csv("water/az_views/ref_waterbody.csv")
+count_10 <- nrow(ref_waterbody)
+
+lake_acres <- ref_waterbody %>%
+      dplyr::filter(status_cd == "A") %>%
+      dplyr::select(waterbody_name, waterbody_type_rid, lake_acres) %>% unique()
+
+reach_distances <- huc_reach %>%
+      dplyr::select(vw_WBID, vw_watershed, waterbody_name, reach_distance) %>%
+      dplyr::rename(WBID = vw_WBID, Watershed = vw_watershed) %>%
+      unique()
+
+# la_rd = lake acres and reach distances
+la_rd <- left_join(reach_distances, lake_acres, by = "waterbody_name")
+
+
+# Standards
+df_crit_stnds <- read_csv("water/az_views/criteria_standards.csv") 
+count_11 <- nrow(df_crit_stnds)
+
+df_NP_stnds <- read_csv("water/az_views/MATS_WBID_NUTRIENT.csv") %>%
+      dplyr::select(-X1, -wbid_nutrient_rid)
+colnames(df_NP_stnds) <- toupper(colnames(df_NP_stnds))
+count_12 <- nrow(df_NP_stnds)
+
+df_missing_stnds <- read_csv("water/az_not_views/df_standards missing pieces.csv") 
+count_13 <- nrow(df_missing_stnds)
+
+df_standards <- f_convert_criteria_stnds_to_long(df = df_crit_stnds, df2 = df_NP_stnds, df3 = df_missing_stnds)
+
+# Address the PH standards since they are entered in a different format than the other parameters
+# Break out the pH standards from the df_standards file; delete then from the df_standards file, fix them, then re-attach
+ph_stnds <- subset(df_standards, substance_name == "PH")
+df_standards <- df_standards %>% dplyr::filter(!(substance_name == "PH"))
+
+ph_stnds <- ph_stnds %>% 
+      dplyr::filter(!(is.na(Method)) & acute_chronic %in% c("ACUTE", NA)) %>%
+      dplyr::mutate(acute_chronic = ifelse(!is.na(acute_chronic), NA, acute_chronic))
+
+df_standards <- rbind(df_standards, ph_stnds)
+
+# Remove Duplicate E COLI Units From Standards: All E COLI in CFU/100 ML
+df_standards <- df_standards %>% filter(!grepl("MPN", unit_name))
+
+# Create a dataset that contains all feasible designated use - parameter combinations for joining to the test samples later
+df_standards_join <- df_standards %>%
+      
+      # Align column naming convention and subset to only unique desig_use - parameter combinations
+      dplyr::select(CharacteristicName = substance_name, Desig_Use = desig_use, Condition = acute_chronic) %>%
+      dplyr::mutate(Desig_Use = toupper(Desig_Use), Condition = toupper(Condition)) %>%
+      unique()
+
+
+#-------------------
+# @@@ QuickBase Data
+# ------------------
+
+qb_stnds <- read.csv("water/qb/standards.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE) %>%
+      dplyr::select("substance_name", "cas_qualifier_name", "unit_name", "standard", "desig_use", "acute_chronic", "Method", "Date_Created", "Date_Modified", "Record_ID_", "Record_Owner", "Last_Modified_By")
+
+qb_crit_conds <- read.csv("water/qb/critical_condtions_improvements.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE) %>%
+      unique() %>%
+      
+      #Assuming False = use since all the rows with True have no dates entered
+      dplyr::filter(Conditions_Apply == "True") %>%
+      # dplyr::filter(Start_Date != "") %>%
+      dplyr::select(WBID, WATERBODY_DESC, Start_Date, End_Date, Conditions_Apply, criticalcondition, criticallocation, everything()) %>%
+      dplyr::mutate(Start_Date = as.Date(Start_Date, "%Y-%m-%d")) %>%
+      dplyr::mutate(End_Date = as.Date(End_Date, "%Y-%m-%d"))
+#      Date_Created,Date_Modified,Record_ID_,Record_Owner,Last_Modified_By,WBID,WATERBODY_DESC,criticalcondition,criticallocation,Conditions_Apply,Start_Date,End_Date
+
+qb_attains <- read.csv("water/qb/attains_history.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE) %>%
+      dplyr::select(-Date_Created, -Date_Modified, -Record_ID_, -Record_Owner, -Last_Modified_By)
+count_14 <- nrow(qb_attains)
+
+```
+
+```{r merge_EPA_data, warning=TRUE, echo=FALSE, message=FALSE}
+
+#@@@ Join the EPA data sets into a single data frame
+# Note:  We originally used dplyr joins for this section, but we were approaching in-memory limitations since dplyr joins take much more memory than data.table joins.  Hence, for this large join, we utilized data.table joins to reduce the memory requirements.  
+
+chem <- data.table(chem)
+setkey(chem, OrganizationIdentifier, MonitoringLocationIdentifier, ProviderName)
+
+sites <- data.table(sites)
+setkey(sites, OrganizationIdentifier, MonitoringLocationIdentifier, ProviderName)
+
+# Data.table join
+test_case_2 <- chem[sites, nomatch=0] %>% dplyr::select(-i.OrganizationFormalName)
+num_chem_tests <- nrow(test_case_2)
+
+test_results <- data.table(test_case_2  %>% left_join(., proj))#  Joining, by = c("OrganizationIdentifier", "ProjectIdentifier"); + 7 cols
+
+test_results <- data.table(test_results %>% left_join(., metrics)) # Joining, by = c("OrganizationIdentifier", "ActivityIdentifier", "MonitoringLocationIdentifier", "ProviderName"); + 16 cols
+
+test_results <- data.table(test_results %>% left_join(., act)) #Joining, by = c("OrganizationIdentifier", "ActivityIdentifier", "ActivityTypeCode", "ActivityMediaName", "ActivityMediaSubdivisionName", "ActivityStartDate", "ActivityStartTime.Time", "ActivityEndDate", "ActivityDepthHeightMeasure.MeasureValue", "ActivityDepthHeightMeasure.MeasureUnitCode", "ProjectIdentifier", "MonitoringLocationIdentifier", "SampleAquifer", "HydrologicCondition", "HydrologicEvent", "SampleCollectionMethod.MethodIdentifier", "SampleCollectionMethod.MethodIdentifierContext", "ProviderName", "OrganizationFormalName"); + 42 cols)
+
+lims <- data.table(lims)
+# setkey(lims, OrganizationIdentifier, ActivityIdentifier, MonitoringLocationIdentifier, CharacteristicName, DetectionQuantitationLimitTypeName, DetectionQuantitationLimitMeasure.MeasureValue, DetectionQuantitationLimitMeasure.MeasureUnitCode, ProviderName, OrganizationFormalName)
+
+# Data.table join
+test_results <- lims[test_results, on=c("OrganizationIdentifier", "ActivityIdentifier", "MonitoringLocationIdentifier", "CharacteristicName", "DetectionQuantitationLimitTypeName", "DetectionQuantitationLimitMeasure.MeasureValue", "DetectionQuantitationLimitMeasure.MeasureUnitCode", "ProviderName", "OrganizationFormalName")]   
+
+```
+
+```{r remove_columns_not_needed, warning=TRUE, echo=FALSE, message=FALSE}
+
+test_results <- test_results %>%
+      
+      # Metrics Data
+      dplyr::select(-OrganizationFormalName, -MetricTypeCitation.FormulaDescriptionText, -MetricTypeCitation.MetricTypeScaleText, -MetricTypeCitation.ResourceTitleName, -MetricTypeCitation.ResourceCreatorName, -MetricTypeCitation.ResourceSubjectText, -MetricTypeCitation.ResourcePublisherName, -MetricTypeCitation.ResourceDate, -MetricTypeCitation.ResourceIdentifier, -MetricValueMeasure.MetricCommentText, -MetricValueMeasure.IndexIdentifier) %>%
+      
+      # Sites Data
+      dplyr::select(-CountryCode, -DrainageAreaMeasure.MeasureValue, -DrainageAreaMeasure.MeasureUnitCode,  -ContributingDrainageAreaMeasure.MeasureValue, -ContributingDrainageAreaMeasure.MeasureUnitCode, -SourceMapScaleNumeric) %>%
+      
+      # Chem Data
+      dplyr::select(-ActivityDepthAltitudeReferencePointText, -ActivityTopDepthHeightMeasure.MeasureValue, -ActivityTopDepthHeightMeasure.MeasureUnitCode, -ActivityBottomDepthHeightMeasure.MeasureValue, -ActivityBottomDepthHeightMeasure.MeasureUnitCode, -ResultWeightBasisText, -ResultTimeBasisText, -ResultTemperatureBasisText, -ResultParticleSizeBasisText, -ResultCommentText, -ResultDepthAltitudeReferencePointText, -MethodDescriptionText, -ResultLaboratoryCommentText, -ActivityStartTime.TimeZoneCode, -ActivityEndTime.Time, -ActivityEndTime.TimeZoneCode, -ActivityConductingOrganizationText, -ActivityCommentText, -SampleCollectionMethod.MethodName, -SampleCollectionEquipmentName, -MeasureQualifierCode, -SubjectTaxonomicName, -SampleTissueAnatomyName) %>%
+
+      # All Other
+      dplyr::select(-ProjectIdentifier, -SampleAquifer,-SampleCollectionMethod.MethodIdentifierContext, -StatisticalBaseCode,
+-ResultAnalyticalMethod.MethodIdentifierContext, -HorizontalAccuracyMeasure.MeasureValue,
+-HorizontalAccuracyMeasure.MeasureUnitCode, -HorizontalCollectionMethodName, -HorizontalCoordinateReferenceSystemDatumName,
+-VerticalMeasure.MeasureValue, -VerticalMeasure.MeasureUnitCode, -VerticalAccuracyMeasure.MeasureValue,
+-VerticalAccuracyMeasure.MeasureUnitCode, -VerticalCollectionMethodName,-VerticalCoordinateReferenceSystemDatumName,
+-CountyCode,-AquiferName, -FormationTypeText, -AquiferTypeName, -ConstructionDateText,-WellDepthMeasure.MeasureValue,
+-WellDepthMeasure.MeasureUnitCode, -WellHoleDepthMeasure.MeasureValue, -WellHoleDepthMeasure.MeasureUnitCode,
+-ProjectName, -ProjectDescriptionText,-ActivityMetricType.MetricTypeIdentifier,
+-ActivityMetricType.MetricTypeIdentifierContext,-ActivityMetricType.MetricTypeName, -MetricValueMeasure.MeasureValue,
+-MetricValueMeasure.MeasureUnitCode, -MetricValueMeasure.MetricScoreNumeric)
+
+```
+
+```{r create_AZDEQ_SW_keys, warning=TRUE, message=FALSE, echo=FALSE}
+
+# Create the secondary Key for the AZDEQ_SW data.  Concatenate 'HUCEightDigitCode' with 'MonitoringLocationName'. This secondary key enables us to join to the 'azdeq_du' data and bring in the 'reach_lake_id' so that we can create our primary key of 'HUC & Reach_Lake_ID,' which is the same primary key we will have for the USGS-AZ data.
+test_results_azdeq <- subset(test_results, OrganizationIdentifier == "AZDEQ_SW") %>%
+      dplyr::mutate(Key2 = paste(HUCEightDigitCode, MonitoringLocationName, sep = "-")) %>%
+      dplyr::select(Key2, everything())
+      
+# Create the same Key from the 'azdeq_du' data frame.  The 'deq_site_name' is the same as the 'MonitoringLocationName' in the azdeq_sw data.  
+azdeq_du_2 <- azdeq_du %>%
+      dplyr::mutate(Key2 = paste(huc_cd, deq_site_name, sep = "-")) %>%
+      dplyr::select(Key2, deq_site_name, huc_cd, reach_lake_id, Desig_Use = designated_use, Desig_Desc = designated_use_description) %>%
+      dplyr::mutate(WBID = paste(huc_cd, reach_lake_id, sep = "-")) %>%
+      
+      # Remove test results with a Desig_Use equal to Standard, Impaired, Tributary, or OAW
+      dplyr::filter(!(Desig_Use %in% c("Standard", "Impaired", "Tributary", "OAW"))) %>%
+      dplyr::select(WBID, Key2, Desig_Use)
+
+# Execute a join that only keeps test samples for Desig_Use-Parameter combinations that exist in the criteria standards file.  It is imperative ADEQ updates this file; otherwise test samples will be erroneously filtered out.  This join ensures that, for every paramater/Key2 in the test samples, they are assigned the appropriate WBID/DU/Parameter/Conditions.  
+azdeq_du_3 <- inner_join(azdeq_du_2, df_standards_join, by = "Desig_Use")
+
+# Remember, a WBID is assigned DUs, and each DU has a set of parameters that must be tested.  This join ensures that for every test sample, we attach a WBID and its respective DUs, and thus, for each parameter tested, it is repeated for every assigned / appropriate DU per WBID.   
+test_results_azdeq <- left_join(test_results_azdeq, azdeq_du_3, by = c("Key2", "CharacteristicName")) %>%
+      tidyr::drop_na(Desig_Use) %>%
+      dplyr::select(WBID, Key2, Desig_Use, CharacteristicName, Condition, everything())
+
+```
+
+```{r create_USGS_AZ_keys, warning=TRUE, message=FALSE, echo=FALSE}
+
+# Subset the chem samples to USGS-AZ data only, and filter out all data that is not 'Surface Water.'  Also, strip all the 8 or 13 digit numbers to the right side of the '-' in the 'MonitoringLocationIdentifier' column.  This number is the 'STATION_ALIAS_ID' in the 'usgs_du' file.  Once we have this number in our sample data we need to create our secondary key (Key2) of 'HUC & Station_Alias_ID.'  This secondary key allows us to join the usgs chem data to the usgs_du data, which brings with it the primary key (WBID). 
+test_results_usgs <- subset(test_results, OrganizationIdentifier == "USGS-AZ") %>%
+  
+      dplyr::mutate(STATION_ALIAS_ID = str_match_all(MonitoringLocationIdentifier, "[0-9]+")) %>%
+      dplyr::mutate(STATION_ALIAS_ID = as.numeric(STATION_ALIAS_ID)) %>%
+      dplyr::mutate(Key2 = paste(HUCEightDigitCode, STATION_ALIAS_ID, sep = "-")) %>%
+      dplyr::select(Key2, everything())
+
+# Join the USGS-AZ sample data with the 'usgs_du' lookup table by Key2.  Before we can do this though, we have to strip out the HUC from the WBID column in 'usgs_du', and then concatenate it with the STATION_ALIAS_ID column so we have Key2 in both tables for the join. 
+usgs_du_2 <- usgs_du %>%
+      dplyr::mutate(HUC = gsub("-.*", "", WBID)) %>%
+      dplyr::mutate(Key2 = paste(HUC, STATION_ALIAS_ID, sep = "-")) %>%
+      dplyr::select(WBID, Key2, DU) %>%
+      dplyr::rename(Desig_Use = DU)
+
+# Execute a join that only keeps test samples for Desig_Use-Parameter combinations that exist in the criteria standards file.  It is imperative ADEQ updates this file; otherwise test samples will be erroneously filtered out.  This join ensures that, for every paramater/Key2 in the test samples, they are assigned the appropriate WBID/DU/Parameter/Conditions. 
+usgs_du_3 <- inner_join(usgs_du_2, df_standards_join, by = "Desig_Use")
+
+# Remember, a WBID is assigned DUs, and each DU has a set of parameters that must be tested.  This join ensures that for every test sample, we attach a WBID and its respective DUs, and thus, for each parameter tested, it is repeated for every assigned / appropriate DU per WBID.  
+test_results_usgs <- left_join(test_results_usgs, usgs_du_3, by = c("Key2", "CharacteristicName")) %>%
+      tidyr::drop_na(Desig_Use) %>%
+      dplyr::select(WBID, Key2, Desig_Use, CharacteristicName, Condition, everything()) %>%
+      dplyr::select(-STATION_ALIAS_ID)
+
+```
+
+```{r create_final_test_results,  warning=TRUE, message=FALSE, echo=FALSE}
+
+# Stack the AZDEQ_SW and USGS test results.  Transform the sample data frame to a data.table to enable faster joins
+test_results <- data.table(rbind(test_results_azdeq, test_results_usgs) %>% 
+      dplyr::select(-Key2)) 
+
+# Join in the Designated Use Description column to the entire data set.  
+desig_descs <- data.table(unique(azdeq_du %>% dplyr::select(designated_use, designated_use_description))) %>%
+      dplyr::rename(Desig_Use = designated_use, Desig_Desc = designated_use_description)
+
+# Join on designates use descriptions
+test_results <- left_join(test_results, desig_descs) 
+
+# Select only the columns we use in Phase I
+test_results <- test_results %>% 
+      
+      dplyr::select(
+            
+            # Defines Sample
+            WBID, CharacteristicName, Desig_Use, ActivityStartDate, ActivityStartTime.Time, ActivityDepthHeightMeasure.MeasureValue,
+            
+            # Descriptions/ Harmonization requirements
+            Desig_Desc, OrganizationIdentifier, HUCEightDigitCode,
+            
+            # Measures and Units
+            ResultMeasureValue, ResultMeasure.MeasureUnitCode, DetectionQuantitationLimitMeasure.MeasureValue, DetectionQuantitationLimitMeasure.MeasureUnitCode,
+            
+            # Qualifiers
+            ResultSampleFractionText, Condition, ResultDetectionConditionText, MonitoringLocationName, MonitoringLocationIdentifier, MonitoringLocationTypeName, ResultAnalyticalMethod.MethodName,
+            
+            # Strip pH if any data points that match contain "field" or "fld" - keep these (rather than do negative log)
+            ResultAnalyticalMethod.MethodName                           
+            
+            ) %>%
+
+      dplyr::select(OrganizationIdentifier, WBID, CharacteristicName, Desig_Use, Desig_Desc, everything())
+
+```
+
+```{r filter_out_tribal_data, warning=TRUE, message=FALSE, echo=FALSE}
+
+test_results_2 <- left_join(test_results, huc_reach_join, by = "WBID") %>%
+      dplyr::select(vw_Tribal_Tag, vw_WBID, vw_swqs_name, vw_watershed, everything())
+
+test_results <- test_results_2 %>%
+  dplyr::filter(!(vw_Tribal_Tag %in% c("Y_NA", "Y_I", "Y_"))) %>%
+  dplyr::select(-vw_Tribal_Tag, -vw_WBID, -vw_swqs_name, - vw_huc, -vw_reach) %>%
+  dplyr::select(WBID, HUCEightDigitCode, vw_watershed, MonitoringLocationIdentifier, MonitoringLocationTypeName, CharacteristicName, everything()) %>%
+  dplyr::rename(Watershed = vw_watershed)
+
+
+# Overwrite all NA entries for Watershed with "UNK"; Reason for this adjustment is so the test samples are not filtered out in the dashboard when filtering the data via the "HUC, WBID, and Watershed" filtering section
+test_results$Watershed <- ifelse(is.na(test_results$Watershed), "UNK", test_results$Watershed)
+
+```
+
+```{r harmonize_attains_data, warning=TRUE, message=FALSE, echo=FALSE}
+
+# Clean up the ATTAINS parameter.csv file for plotting purposes as well as for joining our impairment logic results
+qb_attains_2 <- qb_attains %>%
+   
+  # Remove the leading AZ and AZL from the Assessment_Unit_ID; as well, remove the tailing '_00' from each one.  The remainders is now our WBID.
+  dplyr::mutate(ASSESSMENT_UNIT_ID = gsub('AZ|AZL|_00', '', ASSESSMENT_UNIT_ID)) %>%
+  
+  # Filter out any results without a listed Parameter_Use_Name
+  dplyr::filter(!(PARAM_USE_NAME == "")) %>%
+
+  # For WBID 15060106, ADEQ adds an A or a B to this HUC.  Strip off the A and B for each case so that we can join our impairment results to this existing list of impairments by WBID. 
+  dplyr::mutate(ASSESSMENT_UNIT_ID = gsub("[A:B]*-", "-", ASSESSMENT_UNIT_ID)) %>%
+  
+  # Create a current status column listing either: Impaired, Attaining, or Inconclusive
+  dplyr::mutate(STATUS = case_when (
+            grepl("Not meeting criteria", PARAM_ATTAINMENT_CODE) ~ "Impaired",
+            grepl("Meeting criteria", PARAM_ATTAINMENT_CODE) ~ "Attaining",
+            grepl("Not enough information", PARAM_ATTAINMENT_CODE) ~ "Inconclusive"
+        )
+  ) %>%
+  
+# Align naming conventions between the test_results and this data's PARAM_NAME column. I will overwrite the PARAM_NAME with the CharacteristicName entries from our test_results data. This will ensure a more seamless integration between our results and the current results (for joins, etc.)
+
+  dplyr::mutate(PARAM_NAME = case_when (
+            grepl("AMMONIA, UN-IONIZED", PARAM_NAME) ~ "AMMONIA-NITROGEN",
+            grepl("AQUATIC PLANTS - NATIVE", PARAM_NAME) ~ "AQUATIC PLANTS - NATIVE",
+            grepl("AQUATIC PLANTS (MACROPHYTES)", PARAM_NAME) ~ "AQUATIC PLANTS (MACROPHYTES)",
+            grepl("ARSENIC", PARAM_NAME) ~ "ARSENIC",
+            grepl("BERYLLIUM", PARAM_NAME) ~ "BERYLLIUM",
+            grepl("BORON", PARAM_NAME) ~ "BORON",
+            grepl("CADMIUM", PARAM_NAME) ~ "CADMIUM",
+            grepl("CHLORINE", PARAM_NAME) ~ "CHLORINE",
+            grepl("COPPER", PARAM_NAME) ~ "COPPER",
+            grepl("DISSOLVED OXYGEN", PARAM_NAME) ~ "DISSOLVED OXYGEN (DO)",
+            grepl("(E. COLI)", PARAM_NAME) ~ "ESCHERICHIA COLI",
+            grepl("IRON", PARAM_NAME) ~ "IRON",
+            grepl("LEAD", PARAM_NAME) ~ "LEAD",
+            grepl("MANGANESE", PARAM_NAME) ~ "MANGANESE",
+            grepl("MERCURY IN FISH TISSUE", PARAM_NAME) ~ "MERCURY IN FISH TISSUE",
+            grepl("NITROGEN, TOTAL", PARAM_NAME) ~ "NITROGEN",
+            PARAM_NAME == "NITROGEN" ~ "NITROGEN",
+            PARAM_NAME == "PH" ~ "PH",
+            grepl("PHOSPHORUS, TOTAL", PARAM_NAME) ~ "PHOSPHORUS",
+            grepl("SEDIMENTATION/SILTATION", PARAM_NAME) ~ "SUSPENDED SEDIMENT CONCENTRATION (SSC)",
+            grepl("SELENIUM", PARAM_NAME) ~ "SELENIUM",
+            grepl("ZINC", PARAM_NAME) ~ "ZINC",
+            
+            #------------------------Below this point were not listed in ATTAINS File so don't know how they will look if they are eligible to be listed as impairments.  
+            grepl("AMMONIA-NITROGEN", PARAM_NAME) ~ "AMMONIA-NITROGEN",
+            grepl("AMMONIA AND AMMONIUM", PARAM_NAME) ~ "AMMONIA AND AMMONIUM",
+            grepl("DISSOLVED OXYGEN SATURATION", PARAM_NAME) ~ "DISSOLVED OXYGEN SATURATION"
+            
+            # Note: Parameters in our data not listed above: "HARDNESS, CA, MG", "HARDNESS, NON-CARBONATE", "KJELDAHL NITROGEN", "NITRATE", "NITRITE", "NITROGEN, MIXED FORMS (NH3), (NH4), ORGANIC, (NO2) AND (NO3)", "ORGANIC NITROGEN", "SUSPENDED SEDIMENT CONCENTRATION (SSC)", "TEMPERATURE, WATER", "TOTAL HARDNESS" 
+            # Hence, moving forward it is important that ADEQ monitor the historical impairments and make sure for any new ones that enter and are not addressed above, they do so here.  
+        )
+  ) %>%
+  
+  # Filter to only the parameters included in Phase I.  Once ADEQ completes Phase II, they can remove this filter.  
+  dplyr::filter(PARAM_NAME %in% c("AMMONIA-NITROGEN","ARSENIC","BERYLLIUM","BORON","CADMIUM","CHLORINE","COPPER","DISSOLVED OXYGEN (DO)","ESCHERICHIA COLI","IRON","LEAD","MANGANESE","NITROGEN","PH","PHOSPHORUS","SELENIUM","SUSPENDED SEDIMENT CONCENTRATION (SSC)","ZINC")) %>%
+  
+  # Create a DESIG_USE column for joining purposes later.
+  mutate(DESIG_USE = case_when (
+            grepl("Agricultural Irrigation", PARAM_USE_NAME) ~ "AGI",
+            grepl("Agricultural Livestock Watering", PARAM_USE_NAME) ~ "AGL",
+            grepl("(Coldwater Fishery)", PARAM_USE_NAME) ~ "AWC",
+            grepl("(Effluent Dependent Water)", PARAM_USE_NAME) ~ "AWEDW",
+            grepl("(Ephemeral)", PARAM_USE_NAME) ~ "AWE",
+            grepl("(Warmwater Fishery)", PARAM_USE_NAME) ~ "AWW",
+            grepl("Domestic Water Source", PARAM_USE_NAME) ~ "DWS",
+            grepl("Fish Consumption", PARAM_USE_NAME) ~ "FC",
+            grepl("Full Body Contact", PARAM_USE_NAME) ~ "FBC",
+            grepl("Partial Body Contact", PARAM_USE_NAME) ~ "PBC"
+            
+            # Note:  If failures occur involving the 'F' designated uses, they must be added here to make sure the historical data aligns with the test results data.  
+        )
+  ) %>%
+
+  # Reorder columns
+  dplyr::select("ASSESSMENT_YEAR", "ASSESSMENT_UNIT_ID", "PARAM_NAME", "DESIG_USE", "PARAM_USE_NAME", "PARAM_STATUS_NAME", "STATUS", everything())
+
+
+```  
+
+```{r calc_metrics, warning=TRUE, message=FALSE, echo=FALSE}
+
+# Total number of records imported prior to harmonization, filtering, merging, etc....
+tot_num_rows <- count_1 + count_2 + count_3 + count_4 + count_5 + count_6 + count_7 + count_8 + count_9 + count_10 + count_11 + count_13 + count_14
+
+# Calcuate the amount of time to ingest, filter, and harmonize all data
+end_time <- Sys.time()
+runTime <- round((end_time - start_time), 1) 
+
+# Calculate the distribution of test results for AZDEQ_SW and USGS-AZ
+perc_usgs <- round( (nrow(subset(test_results, OrganizationIdentifier == "USGS-AZ")) / nrow(test_results)), 2) * 100
+perc_azdeq <- 100 - perc_usgs
+
+# Calculate total number of test results
+num_tests <- nrow(test_results)
+
+```
+
+
+Data Selection {data-orientation=rows}
+=======================================================================
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+#### **Welcome**
+##### This is the eLa R-Calculator for assessing surface waters in the state of AZ. Data harmonization overview:
+##### -Total Records: **`r toString(tot_num_rows)`**  
+##### -Harmonized Records: **`r toString(num_tests)`**  
+##### -Harmonization Time: **`r toString(runTime)`** secs 
+##### -% AZDEQ_SW Data: **`r toString(perc_azdeq)`**%  
+##### -% USGS-AZ Data: **`r toString(perc_usgs)`**%  
+  
+
+```{r find_harmonized_test_result_dates, warning=TRUE, message=FALSE, echo=FALSE}
+
+# Calculate date range, minimum and maximum of the harmonized test results; note this is not the min and max of the user defined date ranges
+maxDate <- max(test_results$ActivityStartDate)
+minDate <- min(test_results$ActivityStartDate)
+
+# Set the default date to 5 years prior; if there isn't 5 years worth, then set it to the minimum date in the data
+five_yr_date <- max((maxDate - (365*5)), minDate)
+data_max_date <- max(test_results$ActivityStartDate)
+
+renderText("Available Data:")
+renderText(paste(minDate, " to ", maxDate, sep = ""))
+
+```
+
+##### **1. Select Test Results**  
+##### The test results and standards files ***must be*** selected prior to setting dates and loading the data.  
+```{r select_test_samples, warning=TRUE, message=FALSE, echo=FALSE}
+
+# Simplify the data to what is needed to filter the test results file: WBID, Startdate, and Enddate
+cc_data <- data.table(
+      qb_crit_conds %>%
+      dplyr::select(WBID, Start_Date, End_Date) %>%
+      unique()
+)
+
+test_results <- data.table(test_results)
+
+# Data.table join to reduce memory usage
+setkey(test_results, WBID)
+setkey(cc_data, WBID)
+df_remove <- cc_data[test_results, allow.cartesian = TRUE]
+
+# Create a data frame showing the test results removed due to critical conditions.  
+df_remove <- df_remove %>%
+       dplyr::mutate(remove_me = ifelse(ActivityStartDate >= Start_Date & ActivityStartDate <= End_Date, 1, 0))
+df_remove <- df_remove %>% filter(remove_me == 1)
+
+# Create the radio button for test result data selection
+radioButtons(inputId = "testResults", label = "", 
+             # character(0) setting ensures no button is selected for default
+             choices = c("Provisional Test Results", "Test Results"), selected = character(0))
+
+
+# If provisional are selected, then execute the code to filter with critical conditions; user_tr_1 = user test_results 1
+user_tr_1 <- reactive ({ 
+      
+                  if(input$testResults == "Test Results") {
+                        
+                        df1 <- test_results
+                        
+                  } else {
+
+                        df1 <- test_results %>% anti_join(df_remove)
+                  }
+                  
+                  df1
+      
+                })
+
+```
+
+##### **2. Select Standards File**  
+```{r select_standards, warning=TRUE, message=FALSE, echo=FALSE}
+
+radioButtons(inputId="standards", label="",
+               choices=c("Authoritative Standards","User Defined Standards"), selected = character(0))
+
+# Set the standards file to the user selection.
+user_stds <- reactive({ 
+                  
+                  if(input$standards == "Authoritative Standards") {
+
+                        df2 <- df_standards
+
+                  } else {
+
+                        df2 <- qb_stnds %>% 
+                              dplyr::select(substance_name, cas_qualifier_name, unit_name, standard, desig_use, acute_chronic, Method) %>% dplyr::mutate(standard = as.numeric(standard))
+
+                        df2[df2 == ""] = NA
+                        
+                         }
+
+                  df2
+
+                })
+
+observeEvent(input$standards, {
+
+
+      # Placeholder if ADEQ wants to export data/ archive at some point.  If so, do it here.  Below is commented code as an example.  
+
+            # Set working directory to the Archives Folder
+            # setwd("wherever you want it saved"")
+      
+            # See where the file is written
+            # print(getwd())
+            
+            # write_csv(x = user_stds(), path = paste0("user_stnds ", Sys.Date(), ".csv" ))
+
+})
+
+```
+
+##### **3. Select Dates**
+##### Make sure you selected desired test results and standards prior to setting dates. Changing dates manipulates the plots and tables on the 'Data Selection' page, but the data is not loaded for the calculator until the 'Load R-Calculator' button is selected.  
+```{r filter_test_results_by_user_dates, warning=TRUE, message=FALSE, echo=FALSE}
+
+# Create calendar box inputs
+dateInput("startDate", "Select Start Date: ", five_yr_date, startview = "month", weekstart = 0, width = '80%')
+dateInput("endDate", "Select End Date: ", maxDate, startview = "month", weekstart = 0, width = '80%')
+
+# Include actionButton to prevent write occuring before user finalizes selections
+actionButton("generateButton", "Load R-Calculator")   
+
+# Subset the the test_results by the user entered dates.  Notice, we do not want every date selection change by the user to re-initiate the entire dashboard. Hence, we created the 'Load R-Calculator' button.  
+user_tr_2 <- reactive({
+      
+            if(input$generateButton == 0) {
+                  
+                  return()
+                  
+            } else {
+                  
+                  inp.sd <- isolate(input$startDate)
+                  inp.ed <- isolate(input$endDate)
+            
+                  df3 <- subset(user_tr_1(), ActivityStartDate >= inp.sd & ActivityStartDate <= inp.ed)
+            }
+            
+            df3
+})      
+
+# Export the test_results that were filtered by user defined dates.
+observeEvent(input$generateButton, {
+      
+      # standards must also be selected before data can be loaded
+      if(length(input$standards) == 0) {
+             
+             return()
+      
+      } else {
+      
+      # Placeholder if ADEQ wants to export data/ archive at some point.  If so, do it here.  Below is commented code as an example.  
+
+            # Set working directory to the Archives Folder
+            # setwd("wherever you want it saved"")
+      
+            # See where the file is written
+            # print(getwd())
+            
+            # write_csv(x = user_tr_2(), path = paste0("test_results ", Sys.Date(), ".csv" ))
+      
+      }
+
+})
+
+
+```
+
+##### **4. Filter Plots & Tables**
+
+```{r create_data_summary_filters, warning=TRUE, message=FALSE, echo=FALSE}
+
+# Parameter selection for view in dashboard plots only; does not reduce the final test results
+
+### Data Summary page
+myChoicesParameters <- reactive({ as.list(sort(unique(user_tr_2()$CharacteristicName))) })
+myChoicesDU <- reactive({ as.list(sort(unique(user_tr_2()$Desig_Use))) })
+myChoicesHUC <- reactive({ as.list(sort(unique(user_tr_2()$HUCEightDigitCode))) })
+myChoicesWaterShed <- reactive({ as.list(sort(unique(user_tr_2()$Watershed))) })
+myChoicesWBID <- reactive({ as.list(sort(unique(user_tr_2()$WBID))) })
+
+### Standards page
+myChoicesSubstanceName  <- as.list(sort(unique(df_standards$substance_name)))
+myChoicesDesigUses <- as.list(sort(unique(df_standards$desig_use)))
+
+# Historical Impairments page
+myChoiceYear <- as.list(sort(unique(qb_attains_2$ASSESSMENT_YEAR)))
+
+
+```
+
+##### 4_(a). **WBID**, **HUC**, and/ or **Watershed** selections apply to the *'Selected Test Results'*  table. Watershed "SR" denotes HUC 'A' and "MG" denotes HUC 'B.' Hold the 'Ctl' key to add individual selections or the 'Shift' key to select groups.  
+
+```{r create_WBID_HUC_WaterShed_inputs, warning=TRUE, message=FALSE, echo=FALSE}
+
+
+renderUI ({
+           
+       selectInput('wbid', 'WBIDs:', myChoicesWBID(), selected = myChoicesWBID(), selectize = FALSE, multiple = TRUE, size = 5)
+      
+})
+
+renderUI ({
+
+      selectInput('huc', 'HUCs:', myChoicesHUC(), selected = myChoicesHUC(), selectize = FALSE, multiple = TRUE, size = 5)
+
+})
+
+renderUI ({
+
+      selectInput('watershed', 'Watersheds:', myChoicesWaterShed(), selected = myChoicesWaterShed(), selectize = FALSE, multiple = TRUE, size = 5)
+
+})
+
+      
+```
+
+##### 4_(b). **Parameter** and/ or **Designated Use** selections apply only to the *Organization Distribution plots*. Hold the 'Ctl' key to add individual selections or the 'Shift' key to select groups.
+
+```{r create_parameter_du_inputs, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderUI ({
+
+      # Can select only parameters included in Phase I; shouldn't be any others, but this is a safety check
+      selectInput('params', 'Parameters:', myChoicesParameters(), selectize = FALSE, selected = c("AMMONIA-NITROGEN","ARSENIC","BERYLLIUM","BORON","CADMIUM","COPPER","DISSOLVED OXYGEN (DO)","ESCHERICHIA COLI","IRON","LEAD","MANGANESE","PH","PHOSPHORUS","SELENIUM","SUSPENDED SEDIMENT CONCENTRATION (SSC)","TEMPERATURE, WATER","ZINC"), multiple = TRUE, size = 5)
+
+})
+      
+
+renderUI ({
+
+      selectInput('du', 'Designated Uses:', myChoicesDU(), selectize = FALSE, selected = c("AGI","AGL","AWC","AWE","AWEDW","AWW","DWS","F1","F2","F3","F4","F5","F6","F7","F8","F9","FBC","FC","PBC"), multiple = TRUE, size = 5)
+
+})
+
+```
+
+##### **5.  Download 'Selected Test Results' table if desired..**   
+
+```{r test_results_download_handler, warning=TRUE, message=FALSE, echo=FALSE}
+
+downloadHandler(filename = function() {
+     paste('Assessment Test Results', Sys.Date(), '.csv', sep='')
+   },
+     content = function(file) {
+     write.csv(user_tr_2(), file, row.names = FALSE)
+   }
+)
+
+```
+
+
+Column 
+-----------------------------------------------------------------------
+
+### Parameter Sampling Distribution by Organization
+
+```{r bp_params_org, warning=TRUE, message=FALSE, echo=FALSE}
+
+# https://www.color-hex.com/
+fill_adeq <- c('#5c8985', '#605e5e')
+
+org_params <- reactive({
+            
+      subset(user_tr_2(), ActivityStartDate >= input$startDate & ActivityStartDate <= input$endDate) %>%
+            dplyr::select(OrganizationIdentifier, CharacteristicName) %>%
+            dplyr::filter(CharacteristicName %in% input$params) %>%
+            dplyr::group_by(OrganizationIdentifier, CharacteristicName) %>%
+            dplyr::arrange(CharacteristicName) %>%
+            dplyr::summarize(Freq = n())
+            
+      })
+      
+      renderPlotly({
+            
+            validate(
+                  need(input$generateButton != 0, message = "Plot will populate once you load the data.")
+            )
+            
+            bp_org_params <- ggplot(org_params(), aes(x = CharacteristicName, y = Freq, fill = OrganizationIdentifier)) + 
+                  geom_bar(stat = "identity") + 
+                  theme_bw() + 
+                  scale_fill_manual(values = fill_adeq) +
+                  labs(x = "", y = "Number of Test Results") + 
+                  ggtitle("Distribution of Test Result Parameters Sampled by Organization") +
+                  theme(
+                        plot.title = element_text(hjust = 0.4, size = 11),
+                        legend.position = "none"
+                  ) + 
+                  coord_flip()
+      
+            ggplotly(bp_org_params)
+        
+      })
+     
+
+```
+
+### Designated Use Sampling Distribution by Organization
+
+```{r bp_desig_uses, warning=TRUE, message=FALSE, echo=FALSE}  
+
+# Subset data to reduce size prior to placing in the below reactive function
+org_du <- reactive({ user_tr_2() %>% 
+            
+      dplyr::select(OrganizationIdentifier, Desig_Use, ActivityStartDate) %>%
+      dplyr::rename(Organization = OrganizationIdentifier)
+      
+      })
+      
+filtered_org_du <- reactive({
+        
+      subset(org_du(), Desig_Use %in% input$du & ActivityStartDate >= input$startDate & ActivityStartDate <= input$endDate) %>%
+      dplyr::group_by(Organization, Desig_Use) %>%
+      dplyr::summarize(Num_TestResults = n())
+      
+      })
+      
+renderPlotly({
+      
+      validate(
+            need(input$generateButton != 0, message = "Plot will populate once you load the data.")
+      )
+      
+      bp_du_yr <- ggplot(filtered_org_du(), aes(x = reorder(Desig_Use, Num_TestResults), y = Num_TestResults, fill = Organization)) + 
+            geom_bar(stat = "identity") + 
+            theme_bw() + 
+            scale_fill_manual(values = fill_adeq) +
+            labs(x = "", y = "Number of Test Results") + 
+            ggtitle("Distribution of Test Result Designated Uses by Organization") +
+            theme(
+                  plot.title = element_text(hjust = 0.4, size = 11),
+                  legend.position = "none"
+            ) + 
+            coord_flip()
+      
+            ggplotly(bp_du_yr)
+      
+      })
+
+
+```
+
+Column {.tabset .tabset-fade}
+-----------------------------------------------------------------------
+
+### Selected Test Results
+
+```{r init_test_results,  warning=TRUE, message=FALSE, echo=FALSE}
+
+n_col_utr <- reactive({ ncol(user_tr_2()) - 1 })
+
+data_select_tr <- reactive({ 
+
+                  data_select_tr <- subset(user_tr_2(),
+                           
+                           ActivityStartDate >= input$startDate & ActivityStartDate <= input$endDate & 
+                           WBID %in% input$wbid &
+                           Watershed %in% input$watershed &
+                           HUCEightDigitCode %in% input$huc
+                           
+                         ) %>%
+                        
+                           dplyr::select(WBID, CharacteristicName, Desig_Use, Watershed, ActivityStartDate, MonitoringLocationIdentifier, everything())
+                  })
+
+
+DT::renderDataTable({
+      
+      validate(
+            need(input$generateButton != 0, message = "Table will populate once you load the data.")
+      )
+      
+      DT::datatable(data_select_tr(), 
+            fillContainer = TRUE,
+            extensions = c('Scroller', 'FixedColumns', 'KeyTable', 'FixedHeader'),
+            options = list(
+                  pageLength = 25,
+                  deferRender = TRUE,
+                  scrollX = TRUE,
+                  scrollY = 200,
+                  scroller = TRUE,
+                  autoWidth = TRUE,
+                  fixedHeader = TRUE,
+                  keys = TRUE,
+                  fixedColumns = list(leftColumns = 3),
+                  searchHighlight = TRUE,
+                  columnDefs = list(list(className = 'dt-center', targets = 0:n_col_utr()))
+            ),
+            rownames = FALSE
+       )
+# }, server = FALSE) # Ensures the entire data table is exported via a table button, but it hits memory and runtime pretty hard.  
+})
+
+
+
+```
+
+### Critical Conditions via QuickBase
+
+```{r qb_crit_conds, warning=TRUE, message=FALSE, echo=FALSE}
+
+n_col_qb_cc <- ncol(qb_crit_conds) - 1
+      
+DT::datatable(qb_crit_conds,
+            fillContainer = TRUE,
+            extensions = c('Scroller', 'FixedColumns', 'KeyTable', 'FixedHeader'),
+            options = list(
+                  deferRender = TRUE,
+                  scrollX = TRUE,
+                  scrollY = 200,
+                  scroller = TRUE,
+                  autoWidth = TRUE,
+                  fixedHeader = TRUE,
+                  keys = TRUE,
+                  fixedColumns = list(leftColumns = 4),
+                  searchHighlight = TRUE,
+                  columnDefs = list(list(className = 'dt-center', targets = 0:n_col_qb_cc))
+            ),
+            rownames = FALSE
+)
+
+```
+
+### Test Samples Removed Due to Critical Conditions
+
+```{r crit_cond_affected_samples,  warning=TRUE, message=FALSE, echo=FALSE}
+
+n_col_cc_removals <- ncol(df_remove) - 1 
+      
+# Plot table of removed test samples
+DT::datatable(df_remove,
+            extensions = c('FixedColumns', 'KeyTable', "Buttons"),
+            options = list(
+                 dom = "Bfrtip",
+                 buttons = c('excel', 'csv'),
+                 deferRender = TRUE,
+                 pageLength = 3,
+                 keys = TRUE,
+                 scroller = TRUE,
+                 scrollX = TRUE,
+                 fixedColumns = list(leftColumns = 3),
+                 searchHighlight = TRUE,
+                 columnDefs = list(list(className = 'dt-center', targets = 0:n_col_cc_removals))
+            ),
+            
+            rownames = FALSE
+)
+
+```
+
+
+Standards {data-orientation=rows}
+=======================================================================
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+#### **Criteria Standards Section**
+##### The 'Authoritative Criteria Standards' are from the authoritative data source whereas 'User Defined Criteria Standards' populate via QuickBase for sensitivity analysis and testing purposes.  
+
+```{r display_user_selection, , warning=TRUE, message=FALSE, echo=FALSE}
+
+renderText ({ paste( "You selected: ", input$standards, sep = "") })
+
+```
+
+  
+##### **Filter by Parameter:**
+
+```{r stnds_filtering, warning=TRUE, message=FALSE, echo=FALSE}
+
+selectInput('sub_names', 'Select Parameter(s)', myChoicesSubstanceName, selected = myChoicesSubstanceName, selectize = FALSE, multiple = TRUE, size = 10)
+      
+```
+
+##### **Filter by Designated Use:**
+
+```{r du_filtering, warning=TRUE, message=FALSE, echo=FALSE}
+
+selectInput('desig_uses', 'Select Designated Use(s)', myChoicesDesigUses, selectize = FALSE, selected = c("AGI","AGL","AWC","AWE","AWEDW","AWW","DWS","FBC","FC","PBC"), multiple = TRUE, size = 5)
+      
+```
+
+Column {.tabset .tabset-fade}
+-----------------------------------------------------------------------
+
+### Authoritative Criteria Standards
+
+```{r calculator_standards,  warning=TRUE, message=FALSE, echo=FALSE}
+
+n_col_stds <- ncol(df_standards) - 1
+
+auth_stnds_filtered <- reactive({
+      
+      subset(df_standards, substance_name %in% input$sub_names & desig_use %in% input$desig_uses)
+      
+})
+
+DT::renderDataTable({
+      DT::datatable(auth_stnds_filtered(),
+            fillContainer = TRUE,
+            extensions = c('Buttons', 'Scroller', 'FixedColumns', 'KeyTable', 'FixedHeader'),
+            options = list(
+                 dom = 'Bfrtip',
+                 buttons = c('excel', 'csv'),
+                 deferRender = FALSE,
+                 scrollX = TRUE,
+                 scrollY = 200,
+                 scroller = TRUE,
+                 keys = TRUE,
+                 fixedColumns = list(leftColumns = 1),
+                 searchHighlight = TRUE,
+                 columnDefs = list(list(className = 'dt-center', targets = 0:n_col_stds))
+            ),
+            rownames = FALSE
+  )
+}, server = FALSE)
+
+
+```
+
+### User Defined Criteria Standards via QuickBase
+
+```{r user_adjusted_standards,  warning=TRUE, message=FALSE, echo=FALSE}
+
+n_col_qb3 <- ncol(qb_stnds) - 1
+
+qb_stnds_filtered <- reactive({
+      subset(qb_stnds, substance_name %in% input$sub_names & desig_use %in% input$desig_uses)
+})
+
+DT::renderDataTable({
+      DT::datatable(qb_stnds_filtered(),
+            fillContainer = TRUE,
+            extensions = c('Scroller', 'KeyTable'),
+            options = list(
+                 deferRender = FALSE,
+                 scrollX = TRUE,
+                 scrollY = 200,
+                 scroller = TRUE,
+                 keys = TRUE,
+                 fixedColumns = list(leftColumns = 1),
+                 searchHighlight = TRUE,
+                 columnDefs = list(list(className = 'dt-center', targets = 0:n_col_qb3))
+            ),
+            rownames = FALSE
+      )
+})
+
+
+```
+
+Historical Assessments {data-orientation=rows}
+=======================================================================
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+#### **Historical Impairments via ATTAINS**
+
+##### **Select Historical Assessment:**
+```{r select_impair_year, warning=TRUE, message=FALSE, echo=FALSE}
+
+selectInput('assessYear', 'Assessment Years:', myChoiceYear, selectize = FALSE, 
+            selected = max(as.numeric(myChoiceYear)), multiple=FALSE)
+
+# Unique WBID Impairments
+df_curr_impairments <- reactive({
+      subset(qb_attains_2, ASSESSMENT_YEAR == input$assessYear) %>% 
+      dplyr::mutate(PARAM_PRIORITY_RANKING = ifelse(PARAM_PRIORITY_RANKING == "", "None", PARAM_PRIORITY_RANKING)) %>%  
+      dplyr::filter(STATUS == "Impaired") %>%
+      unique()
+})
+
+# Total number of Waterbodies with parameter impairments
+tot_wbid_impaired <- reactive({
+      length(unique(df_curr_impairments()$ASSESSMENT_UNIT_ID))
+})
+
+
+# Total Impairments (at the WBID-CharachteristicName-Desig_Use leve)
+tot_impairments <- reactive({
+      nrow(unique(df_curr_impairments()))
+})
+
+
+# Remove NAs in Param_Year_Listed column so min and max work properly
+impair_yr_data <- reactive({
+      subset(qb_attains_2, ASSESSMENT_YEAR == input$assessYear) %>%
+      dplyr::filter(!(is.na(PARAM_YEAR_LISTED)))
+})
+
+min_impair_yr <- reactive({
+      min(impair_yr_data()$PARAM_YEAR_LISTED)
+})
+
+max_impair_yr <- reactive({
+      max(impair_yr_data()$PARAM_YEAR_LISTED)
+})
+
+
+dt_wbid_data <- reactive({
+      df_curr_impairments() %>% 
+      dplyr::select(ASSESSMENT_UNIT_ID, PARAM_NAME, DESIG_USE, STATUS) %>% 
+      dplyr::group_by(ASSESSMENT_UNIT_ID) %>%
+      dplyr::summarize(Num_Impairs = n()) %>%
+      dplyr::arrange(desc(Num_Impairs))
+})
+
+
+# Add the lake_acres and reach_distance data to the current impairments listed.  
+# la_rd = lake acres and reach distance data
+la_rd_data <- la_rd %>%
+      dplyr::rename(ASSESSMENT_UNIT_ID = WBID) %>%
+      dplyr::select(ASSESSMENT_UNIT_ID, reach_distance, lake_acres) %>%
+      dplyr::mutate(reach_distance = as.numeric(reach_distance)) %>%
+      unique()
+      
+# Find WBIDs with multiple waterbody_names since this is what we join on; 'wbn' stands for waterbody_name
+dup_wbn <- la_rd_data %>%
+      dplyr::select(ASSESSMENT_UNIT_ID) %>%
+      group_by(ASSESSMENT_UNIT_ID) %>%
+      summarize(N = n()) %>%
+      dplyr::filter(N > 1) %>%
+      dplyr::select(ASSESSMENT_UNIT_ID) %>%
+      unique()
+
+
+# Find instances where both the lake_acres and reach_distance are both NA.  In this case, there is nothing to add up.  Hence, we can only remove them and highlight the number of occurrences.  If a fix is required, it must be done in the authoritative data.  
+na_wbn <- la_rd_data %>%
+      dplyr::filter(is.na(lake_acres) & is.na(reach_distance))
+num_na_wbn <- nrow(na_wbn)
+
+
+la_rd_join <- if(num_na_wbn == 0 ) {
+
+      la_rd_join <- la_rd_data %>%
+      dplyr::mutate(lake_acres = round(lake_acres, 1)) %>%
+      dplyr::mutate(reach_distance = round(reach_distance, 1))
+
+      } else {
+      
+      la_rd_join <- anti_join(la_rd_data, na_wbn) %>%
+      dplyr::mutate(lake_acres = round(lake_acres, 1)) %>%
+      dplyr::mutate(reach_distance = round(reach_distance, 1))
+}
+
+# Join the lake_acres and reach_distance data 
+dt_wbid_data_2 <- reactive({
+      left_join(dt_wbid_data(), la_rd_join, by = "ASSESSMENT_UNIT_ID") %>%
+      dplyr::mutate(lake_acres = ifelse(is.na(lake_acres), 0, lake_acres)) %>%
+      dplyr::mutate(reach_distance = ifelse(is.na(reach_distance), 0, reach_distance)) %>%
+      dplyr::rename(Lake_Acres = lake_acres, Stream_Miles = reach_distance) %>%
+      dplyr::select(ASSESSMENT_UNIT_ID, Num_Impairs, Lake_Acres, Stream_Miles)
+
+})
+
+cy_lake_acres <- reactive({
+      sum(dt_wbid_data_2()$Lake_Acres)
+})
+
+cy_reach_distance <- reactive({
+      sum(dt_wbid_data_2()$Stream_Miles)
+})
+
+
+```
+
+  
+#### **Historical Selection Results:**  
+##### For the year selected, the net waterbody impairment quantity and associated lake acres and stream miles affected are:    
+```{r rt_wbid_impaired, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderText(paste( "Net Impaired WBID: ", tot_wbid_impaired(), sep = ""))
+
+```
+
+```{r rt_tot_impairments, warning=TRUE, message=FALSE, echo=FALSE} 
+
+renderText(paste( "Total Impairments: ", tot_impairments(), sep = ""))
+
+```
+
+```{r rt_lake_acres_impaired, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderText(paste("Lake Acres Impaired: ", cy_lake_acres(), sep = ""))
+
+```
+
+```{r rt_strem_miles_impaired, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderText(paste("Stream Miles Impaired: ", cy_reach_distance(), sep = ""))
+
+```
+
+##### **Note:**  All comparisons between historical and current are for *Phase I parameters only!*  
+
+Column {.tabset .tabset-fade}
+-----------------------------------------------------------------------
+
+### Distribution of Impairments by Parameter
+  
+```{r bp_param_impairs_hist, warning=TRUE, message=FALSE, echo=FALSE}
+
+bp_param_data <- reactive({
+      df_curr_impairments() %>% 
+      dplyr::filter(!(PARAM_NAME == "null")) %>%   
+      dplyr::group_by(PARAM_NAME) %>%
+      dplyr::summarize(Quantity = n())
+})
+
+
+renderPlotly({ 
+      bp_param_impairs <- ggplot(bp_param_data(), aes(x = reorder(PARAM_NAME, Quantity), y = Quantity)) + 
+            geom_bar(stat = "identity", fill = '#605e5e') + 
+            theme_bw() + 
+            labs(x = "", y = "Quantity") + 
+            ggtitle("Impairments by Parameters") +
+            theme(
+                  plot.title = element_text(hjust = 0.4, size = 11),
+                  legend.position = "none"
+            ) + 
+            coord_flip()
+
+      ggplotly(bp_param_impairs)
+})
+
+
+```
+
+### Table: Waterbody Impairment Quantities
+  
+```{r table_wbid_impairs_hist, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderDataTable({
+      DT::datatable(dt_wbid_data_2(),
+            fillContainer = TRUE,
+            extensions = c('Scroller', 'KeyTable'),
+            options = list(
+                 deferRender = TRUE,
+                 scrollX = TRUE,
+                 scrollY = 100,
+                 scroller = TRUE,
+                 keys = TRUE,
+                 fixedColumns = list(leftColumns = 1),
+                 searchHighlight = TRUE,
+                 columnDefs = list(list(className = 'dt-center', targets = 0:3))
+            ),
+            rownames = FALSE
+      )
+})
+
+```
+
+
+### Table: ATTAINS Data for Selected Year via QuickBase
+
+```{r table_auth_attains, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderDataTable({
+      DT::datatable(df_curr_impairments(),
+            fillContainer = TRUE,
+            extensions = c('Scroller', 'KeyTable'),
+            options = list(
+                 deferRender = FALSE,
+                 scrollX = TRUE,
+                 scrollY = 200,
+                 scroller = TRUE,
+                 keys = TRUE,
+                 fixedColumns = list(leftColumns = 3),
+                 searchHighlight = TRUE,
+                 columnDefs = list(list(className = 'dt-center', targets = 0:21))
+            ),
+            rownames = FALSE
+      )
+})
+
+```
+
+
+Column {.tabset .tabset-fade}
+-----------------------------------------------------------------------
+
+### Percentage of Impairments by Parameter Priority Rankings  
+  
+```{r bp_prior_rankings_hist, warning=TRUE, message=FALSE, echo=FALSE}
+
+bp_priority_data <- reactive({
+      df_curr_impairments() %>%
+            dplyr::mutate(PARAM_PRIORITY_RANKING = ifelse(PARAM_PRIORITY_RANKING == "", "None", PARAM_PRIORITY_RANKING)) %>%
+            dplyr::mutate(PARAM_PRIORITY_RANKING = factor(PARAM_PRIORITY_RANKING, levels = c("None", "Low", "Medium", "High"))) %>%
+            dplyr::group_by(PARAM_PRIORITY_RANKING) %>%
+            dplyr::summarize(Quantity = n()) %>%
+            dplyr::mutate(Percent = Quantity / sum(Quantity)) %>%
+            dplyr::mutate(Percent = 100*round(Percent, 2))
+})
+
+renderPlotly({      
+      bp_prior_impairs <- ggplot(bp_priority_data(), aes(x = PARAM_PRIORITY_RANKING, y = Percent)) + 
+            geom_bar(stat = "identity", fill = '#605e5e') + 
+            theme_bw() + 
+            labs(x = "", y = "Quantity") + 
+            ggtitle("Percentage of Impairments by Parameter Priority Rankings") +
+            theme(
+                  plot.title = element_text(hjust = 0.4, size = 11),
+                  legend.position = "none"
+            ) + 
+            coord_flip()
+      
+      ggplotly(bp_prior_impairs)
+
+})
+
+```
+
+### Distribution of Impairments by Designated Use 
+  
+```{r bp_desig_use_impairs_hist, warning=TRUE, message=FALSE, echo=FALSE}
+
+bp_du_data <- reactive({
+      df_curr_impairments() %>% 
+            dplyr::group_by(DESIG_USE) %>%
+            dplyr::summarize(Quantity = n())
+})
+
+renderPlotly({      
+      bp_du_impairs <- ggplot(bp_du_data(), aes(x = reorder(DESIG_USE, Quantity), y = Quantity)) + 
+            geom_bar(stat = "identity", fill = '#605e5e') + 
+            theme_bw() + 
+            labs(x = "", y = "Quantity") + 
+            ggtitle("Impairments by Designated Uses") +
+            theme(
+            plot.title = element_text(hjust = 0.4, size = 11),
+            legend.position = "none"
+            ) + 
+            coord_flip()
+      
+      ggplotly(bp_du_impairs)
+
+})
+
+```
+
+Current Assessment {data-orientation=rows}
+=======================================================================
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+#### **Run R-Calculator**  
+  
+##### All data should be properly loaded in the 'Data Selection' page prior to running the R-Calculator.  
+```{r display_year_selected, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderText(paste("Year selected for comparison: ", input$assessYear, sep = ""))
+
+```
+
+```{r run_R_calculator, warning=TRUE, message=FALSE, echo=FALSE}
+
+actionButton("runCalc", "Run R-Calculator")  
+
+df_iaid <- reactive({
+
+      if(input$runCalc == 0) {
+            
+            df_iaid <- data.frame()
+            
+      } else {
+               
+      # Run the wrangling and impairment code
+      
+      # Grab the user entered end date   
+      input_end_date <- isolate(input$endDate)      
+
+      df0 <- user_tr_2()
+      
+      df0 <- tbl_df(df0)
+      
+      # Subset to Required Columns
+      df1 <- df0 %>% select(
+            
+            # Defines Sample
+            WBID, CharacteristicName, Desig_Use, ActivityStartDate, ActivityStartTime.Time, ActivityDepthHeightMeasure.MeasureValue,
+            
+            # Measures and Units
+            ResultMeasureValue, ResultMeasure.MeasureUnitCode, DetectionQuantitationLimitMeasure.MeasureValue, DetectionQuantitationLimitMeasure.MeasureUnitCode,
+            
+            # Qualifiers
+            ResultSampleFractionText, Condition, ResultDetectionConditionText, MonitoringLocationTypeName,
+            
+            # Strip pH if any data points that match contain "field" or "fld" - keep these (rather than do negative log)
+            ResultAnalyticalMethod.MethodName 
+            
+            ) 
+          
+      # Units to all UPPERCASE
+      df2 <- df1 %>% 
+            mutate(ResultMeasure.MeasureUnitCode = toupper(ResultMeasure.MeasureUnitCode)) %>% 
+            mutate(DetectionQuantitationLimitMeasure.MeasureUnitCode = toupper(DetectionQuantitationLimitMeasure.MeasureUnitCode)) %>% 
+            mutate(ResultSampleFractionText = toupper(ResultSampleFractionText)) %>% 
+            mutate(ResultDetectionConditionText = toupper(ResultDetectionConditionText)) %>%
+            
+            dplyr::mutate(ActivityDepthHeightMeasure.MeasureValue = as.numeric(ActivityDepthHeightMeasure.MeasureValue)) %>%
+            dplyr::mutate(ResultMeasureValue = as.numeric(ResultMeasureValue)) %>%
+            dplyr::mutate(DetectionQuantitationLimitMeasure.MeasureValue = as.numeric(DetectionQuantitationLimitMeasure.MeasureValue)) %>%
+            dplyr::mutate(ActivityStartTime.Time = as.difftime(hms(ActivityStartTime.Time))) %>%
+            
+            # Change all "" instances in the data to NA; all functions are coded to handle NAs vice missing data
+            dplyr::mutate(ResultDetectionConditionText = ifelse(ResultDetectionConditionText == "", NA, ResultDetectionConditionText)) %>%
+            dplyr::mutate(WBID = ifelse(WBID == "", NA, WBID)) %>%
+            dplyr::mutate(CharacteristicName = ifelse(CharacteristicName == "", NA, CharacteristicName)) %>%
+            dplyr::mutate(Desig_Use = ifelse(Desig_Use == "", NA, Desig_Use)) %>%
+            dplyr::mutate(ActivityDepthHeightMeasure.MeasureValue = ifelse(ActivityDepthHeightMeasure.MeasureValue == "", NA, ActivityDepthHeightMeasure.MeasureValue)) %>%
+            dplyr::mutate(ResultMeasureValue = ifelse(ResultMeasureValue == "", NA, ResultMeasureValue)) %>%
+            dplyr::mutate(ResultMeasure.MeasureUnitCode = ifelse(ResultMeasure.MeasureUnitCode == "", NA, ResultMeasure.MeasureUnitCode)) %>%
+            dplyr::mutate(DetectionQuantitationLimitMeasure.MeasureValue = ifelse(DetectionQuantitationLimitMeasure.MeasureValue == "", NA, DetectionQuantitationLimitMeasure.MeasureValue)) %>%
+            dplyr::mutate(DetectionQuantitationLimitMeasure.MeasureUnitCode = ifelse(DetectionQuantitationLimitMeasure.MeasureUnitCode == "", NA, DetectionQuantitationLimitMeasure.MeasureUnitCode)) %>%
+            dplyr::mutate(ResultSampleFractionText = ifelse(ResultSampleFractionText == "", NA, ResultSampleFractionText)) %>%
+            dplyr::mutate(Condition = ifelse(Condition == "", NA, Condition)) %>%
+            dplyr::mutate(MonitoringLocationTypeName = ifelse(MonitoringLocationTypeName == "", NA, MonitoringLocationTypeName)) %>%
+            dplyr::mutate(ResultAnalyticalMethod.MethodName = ifelse(ResultAnalyticalMethod.MethodName == "", NA, ResultAnalyticalMethod.MethodName))
+
+
+      # Remove Duplicate E COLI Units From Standards: All E COLI in CFU/100 ML
+      df_standards <- user_stds() %>% filter(!grepl("MPN", unit_name)) %>%
+            mutate(standard = as.numeric(standard))
+  
+      # Coefficients for Result Dependent Samples
+      df_coeff <- f_result_dependent_coefficients(df_crit_stnds)
+      
+      # Table to direct parameter x desig into correct temporal aggregation method
+      df_agg_id <- read_csv("water/Input_Data/df_agg_id.csv") %>% unique()
+      
+      # Table to split data in to impairment logic streams
+      df_logic <- read_csv("water/Input_Data/df_logic.csv") 
+      
+      # Table for Equipment Tolerances;  The equipment tolerances are not followed by ADEQ anymore, hence, we removed from the logic.  
+      # df_equip_tol <- read_csv("./djs_playground/df_equip_tol.csv") # OBSOLETE
+      
+      # Core Season (Do We Meet Core Seasonal Requirements - Calculated From Data)
+      # df_core_season
+      
+      # Table for Core Season ID (Which Characteristic Name x Desig Use Combos Require Core Seasonal)
+      df_core_indicator <- read_csv("water/Input_Data/df_core_indicator.csv")
+
+# Get Units from Criteria Standards ====
+      
+      mg_per_l <- df_standards %>%
+            select(substance_name, unit_name) %>%
+            unique() %>%
+            arrange(substance_name) %>%
+            filter(unit_name == "MG/L") %>%
+            select(substance_name) %>%
+            pull()
+
+      ug_per_l <- df_standards %>%
+            select(substance_name, unit_name) %>%
+            unique() %>%
+            arrange(substance_name) %>%
+            filter(unit_name == "UG/L") %>%
+            select(substance_name) %>%
+            pull()
+            
+# Convert Units ====
+
+      df3 <- f_unit_conversion(df_in = df2, 
+                              name0 = "CharacteristicName", 
+                              units0 = "ResultMeasure.MeasureUnitCode", 
+                              value0 = "ResultMeasureValue", 
+                              ug_per_l = ug_per_l, 
+                              mg_per_l = mg_per_l)
+      
+      df4 <- f_unit_conversion(df_in = df3, 
+                              name0 = "CharacteristicName", 
+                              units0 = "DetectionQuantitationLimitMeasure.MeasureUnitCode", 
+                              value0 = "DetectionQuantitationLimitMeasure.MeasureValue", 
+                              ug_per_l = ug_per_l, 
+                              mg_per_l = mg_per_l)
+      
+      # Special - E COLI Detection Limits = "NONE" - Convert to "CFU/100ML" 
+      df4 <- df4 %>% 
+            mutate(DetectionQuantitationLimitMeasure.MeasureUnitCode = 
+                         ifelse(grepl("COLI", CharacteristicName) & 
+                                      DetectionQuantitationLimitMeasure.MeasureUnitCode == "NONE",
+                                
+                                "CFU/100ML",
+                                DetectionQuantitationLimitMeasure.MeasureUnitCode
+                         )
+            )
+          
+      
+# Add Units to Results When Missing Due to Non Detect ====
+      
+      df5 <- f_non_detect_units (df_in = df4, 
+                          df_stnd_in = df_standards,
+                          name0 = "CharacteristicName", 
+                          units0 = "ResultMeasure.MeasureUnitCode")
+
+# Remove Dissolved O2 From > 1 M Deep ====
+
+      df6 <- f_remove_DO_gt_1m(df5)
+
+            
+# Remove D x T Exclusions ====
+
+      df7 <- f_dissolved_vs_total_exclusion(df_in = df6, df_stnd_in = df_standards)
+
+  
+# Hardness ====
+      
+      # Pull Hardness From Data Frame - 
+      # Hardness Stnds Only Require CharacteristicName, Desig Use, and Condition (Acute, Chronic)
+      df_hardness <- df7 %>% 
+            select(
+                  WBID, CharacteristicName, Desig_Use, Condition, 
+                  ResultSampleFractionText, # For Hardness Prioritization
+                  ActivityStartDate, ActivityStartTime.Time, ActivityDepthHeightMeasure.MeasureValue,
+                  ResultDetectionConditionText,
+                  ResultMeasureValue,
+                  
+                  # Also Require for Non Detect
+                  ResultMeasure.MeasureUnitCode, DetectionQuantitationLimitMeasure.MeasureUnitCode, DetectionQuantitationLimitMeasure.MeasureValue) %>% 
+            
+            filter(grepl("HARD", CharacteristicName)) 
+      
+
+      df_hardness <- f_hardness(df_hardness)
+
+      
+      # Remove From Main Data Frame
+      df8 <- df7 %>% filter(!grepl("HARD", CharacteristicName))
+
+      
+# Temperature ====
+      
+      # Pull Temp From Data Frame
+      df_temperature <- df8 %>% 
+            
+            select(
+                  WBID, CharacteristicName, Desig_Use, Condition, 
+                  ActivityStartDate, ActivityStartTime.Time, ActivityDepthHeightMeasure.MeasureValue,
+                  ResultMeasureValue, ResultMeasure.MeasureUnitCode) %>% 
+                 
+            filter(grepl("TEMP", CharacteristicName)) 
+      
+      df_temperature <- f_temperature(df_temperature)
+      
+      # Remove From Main Data Frame
+      df9 <- df8 %>% filter(!grepl("TEMP", CharacteristicName))
+      
+# pH ====
+      
+      df_pH <- df9 %>% filter(CharacteristicName == "PH")
+      df_pH <- f_pH(df_in = df_pH)
+      
+      # Remove From Main Data Frame
+      df10 <- df9 %>% filter(CharacteristicName != "PH")
+      
+# Ammonia ====
+      
+      df_ammonia <- df10 %>% filter(grepl("AMMONIA", CharacteristicName))
+      df_ammonia <- f_calculate_ammonia(df_in = df_ammonia)
+
+      
+# Nitrogen ====
+      
+      df_N <- df10 %>% filter(grepl("NIT", CharacteristicName)) %>% filter(!grepl("AMMONIA", CharacteristicName)) 
+      df_N <- f_nitrogen(df_in = df_N, df_ammonia_in = df_ammonia)
+      
+      # Remove Ammonia and Nitrogen From Main Data Frame
+      df11 <- df10 %>% 
+            
+            # Remove these because they are already accounted for
+            filter(!CharacteristicName %in% c("NITROGEN", "KJELDAHL NITROGEN", "NITROGEN, MIXED FORMS (NH3), (NH4), ORGANIC, (NO2) AND (NO3)", "ORGANIC NITROGEN")) %>%
+            filter(!grepl("AMMONIA", CharacteristicName)) %>% 
+            
+            # Remove these because not in phase I - only needed to calculate N
+            filter(!CharacteristicName %in% c("NITRITE", "NITRATE"))
+            
+# Metals ====
+      
+      df_metals <- df11 %>% 
+            
+            # Only Phase I Metals
+            filter(CharacteristicName %in% c("CADMIUM", "COPPER", "LEAD", "ZINC")) %>% 
+            
+            # Only Keep Dissolved
+            filter(ResultSampleFractionText == "DISSOLVED") %>% 
+            
+            # Only Keep Designated Uses Starting with AW
+            filter(Desig_Use %in% c("AWC", "AWE", "AWEDW", "AWW"))
+            
+      
+      # Keep These for Main Processing
+      # Just drop Metals with AW Desig Uses
+      df12 <- df11 %>% anti_join(df_metals %>% select(-ResultSampleFractionText))
+      
+# Non Detect Logic ====
+
+      df14 <- f_non_detect(df_in = df12, df_standards = df_standards)
+      
+      
+# Remove Repeated Measures ====
+      
+      df15 <- f_agg_reps(df14)
+
+      
+# Remove if Dissolved > 110% Total ====
+      
+      df16 <- f_dissolved_gt_110_percent_total(df_in = df15)
+      
+# Remove Dissolved if Total Present ====
+      
+      df16 <- f_remove_dissolved_total_reps(df16)
+      
+      
+# Temporal Independence Aggregation (Typical Paramters) ====
+      
+      df16 <- df16 %>% left_join(df_agg_id)
+
+      # Aggregate typical parameters
+      l_df_agg <- f_temp_ind_agg_typical_parameters(df_in = df16)
+      
+# Temporal Independence Aggregation (Result Dependent Standards) ====
+      
+      # Acute ammonia (Result Dependent Standard)
+      df_agg_acute_ammonia <- f_temp_ind_agg_acute_ammonia(df_ammonia_in = df_ammonia, df_pH = df_pH, df_coeff_in = df_coeff)
+      
+      # Chronic ammonia (Result Dependent Standard)
+      df_agg_chronic_ammonia <- f_temp_ind_agg_chronic_ammonia(df_ammonia_in = df_ammonia, df_pH_in = df_pH, df_temp_in = df_temperature, df_coeff_in = df_coeff)
+      
+      # Acute Metals
+      df_agg_acute_metals <- f_temp_ind_agg_acute_metals(df_metals_in = df_metals, df_hardness_in = df_hardness, df_coeff_in = df_coeff)
+
+      # Chronic Metals
+      df_agg_chronic_metals <- f_temp_ind_agg_chronic_metals(df_metals_in = df_metals, df_hardness_in = df_hardness, df_coeff_in = df_coeff)
+      df_agg_chronic_metals <- df_agg_chronic_metals %>% filter(chronic_standard != 0)
+      
+# Combine All Aggregated Data ====
+     
+      # Note: as we code impairments, we may find that we need to go back and pick up some variables (ResultSampleFractionText, Condition, ...)
+      df100 <- bind_rows(
+            
+            df_agg_acute_ammonia %>% 
+                  select(WBID, CharacteristicName, Desig_Use, Condition, my_year, week_of_year, ResultMeasureValue, standard = acute_standard),
+            
+            df_agg_chronic_ammonia %>% 
+                  mutate(Condition = "CHRONIC") %>% 
+                  select(WBID, CharacteristicName, Desig_Use, Condition, my_year, week_of_year, ResultMeasureValue = ammonia, standard = chronic_standard),
+            
+            df_agg_acute_metals %>% 
+                  mutate(Condition = "ACUTE") %>% 
+                  select(WBID, CharacteristicName, Desig_Use, Condition, my_year, week_of_year, ResultMeasureValue, standard = acute_standard),
+            
+            df_agg_chronic_metals %>% 
+                  mutate(Condition = "CHRONIC") %>% 
+                  select(WBID, CharacteristicName, Desig_Use, Condition, my_year, week_of_year, ResultMeasureValue, standard = chronic_standard),
+      
+            df_N %>% 
+                  select(WBID, CharacteristicName, Desig_Use, my_year, week_of_year, ResultMeasureValue),
+            
+            bind_rows(l_df_agg) %>% 
+                  select(WBID, CharacteristicName, Desig_Use, ResultSampleFractionText, Condition, my_year, week_of_year,
+                         Aggregation,
+                         ResultMeasureValue)
+
+      )
+      
+     
+# pH Weekly Agg ====
+      
+      df_pH <- df_pH %>% 
+            # Weeks
+            mutate(my_year = year(ActivityStartDate)) %>% 
+            mutate(week_of_year = week(ActivityStartDate)) 
+            
+      # Aggregate - min and max (not avg!!!) - add Method column
+      df_pH_min <- df_pH %>% 
+            group_by(WBID, CharacteristicName, Desig_Use, Condition, my_year, week_of_year) %>% 
+            summarise(ResultMeasureValue = min(ResultMeasureValue)) %>% 
+            mutate(ph_method = "min")
+      
+      df_pH_max <- df_pH %>% 
+            group_by(WBID, CharacteristicName, Desig_Use, Condition, my_year, week_of_year) %>% 
+            summarise(ResultMeasureValue = max(ResultMeasureValue)) %>% 
+            mutate(ph_method = "max")
+            
+      df_pH <- bind_rows(df_pH_min, df_pH_max)
+      
+      # Add Back to Data
+      df100 <- bind_rows(df100, df_pH)
+            
+
+# Merge Wrangled Data and Standard ====
+     
+      # Non Result Dependent Standards
+     df101 <-  left_join(
+           
+           # Get Samples without Standards
+           df100 %>% 
+                 
+                 # Only Result Dependent Standards Got Calculated and Carried Forward
+                 filter(is.na(standard)) %>% 
+                 select(-standard),
+           
+           # Join with Standards
+           df_standards %>% 
+                 mutate(standard = as.numeric(standard)) %>% 
+                 filter(standard >= 0) %>% 
+                 
+                 # Nitrite and Nitrate NOT in Phase I 
+                 filter(!substance_name %in% c("NITRITE", "NITRATE")),
+           
+           by = c("CharacteristicName" = "substance_name",
+                  "Desig_Use" = "desig_use",
+                  "Condition" = "acute_chronic"
+                  # "ResultSampleFractionText" = "cas_qualifier_name"
+           )
+           
+     )
+     
+      # Remove If NA Standards
+      df102 <- df101 %>% filter(!is.na(standard)) 
+      
+      # If Max Aggregation, Then Not Method 90P and annual mean
+      # If Mean Aggregation, Then No ssmax
+      df_102_rm <- df102 %>% 
+            filter(CharacteristicName == "PHOSPHORUS") %>% 
+            filter(
+                  (Aggregation == "Max" & Method %in% c("90p", "annmean")) |
+                        (Aggregation == "Mean" & Method %in% c("ssmax")) 
+            )
+      
+      df102 <- df102 %>% anti_join(df_102_rm)
+      
+      # Remove pH mismatches
+      df_rm_ph <- df102 %>% 
+            filter(CharacteristicName == "PH") %>% 
+            filter(Method == "min" & ph_method == "max" | Method == "max" & ph_method == "min")
+      
+      df102 <- df102 %>% anti_join(df_rm_ph) %>% select(-ph_method)
+      
+      
+      # Get Result Dependent Standards and Add Method (max)
+      # NOTE: all result dependent standards are max methods
+      df103 <- df100 %>% filter(standard >= 0) %>% mutate(Method = "max") %>% unique()
+      
+      # Combine Result Dependent and Regular Standards
+      df104 <- bind_rows(df102, df103) 
+      
+      # Remove if Acute == Ave Aggregation OR Chronic == Max
+      df_remove <- df104 %>% filter(
+            
+            (Condition == "ACUTE" & Aggregation %in% c("Mean")) |
+            (Condition == "CHRONIC" & Aggregation %in% c("Max"))      
+            
+      )
+            
+      df104 <- df104 %>% anti_join(df_remove)
+      
+      
+# Split Into Impairment Logic Groupings ====
+      
+      df105 <- left_join(
+            df104,
+            df_logic %>% mutate(Condition = ifelse(grepl("SSC", CharacteristicName), "CHRONIC", Condition))
+      )
+      
+      # Split Work Streams
+      l_df_impair <- df105 %>% split(.$impair_logic)
+      
+      # Extract Data Frames From List
+      for(i in 1:length(l_df_impair)){
+            assign(
+                  x = paste0("df_", names(l_df_impair)[i]),
+                  value = l_df_impair[[i]]
+            )
+      }
+      
+     
+# Core Seasonal Table (to be joined to exceedance tables later...) ====
+      
+      df_core_season <- f_core_season(df105)
+      df_core_season_3YR <- f_core_season_3YR(df105, end_date = input_end_date)
+      
+      
+# Logic a ====
+      
+      df_a_exceed <- f_stnd_exceed(df_a)
+      df_a_impair <- f_binomial(df_a_exceed, binom_var = "stnd_exceed")
+      df_a_attain_core <- f_core(df_in = df_a_exceed, df_core_indicator_in = df_core_indicator, df_core_season_in = df_core_season)
+      df_a_attain_exceed <- f_max_exceed(df_in = df_a_exceed, exceed_col = "stnd_exceed")
+      
+# Logic b ====
+      
+      df_b_exceed <- f_stnd_exceed(df_b)
+      df_b_impair <- f_impair(df_b_exceed, n_exceed_limit = 2, past_x_yrs = 3, my_end_date = input_end_date)
+      df_b_attain_core <- f_core(df_in = df_b_exceed, df_core_indicator_in = df_core_indicator, df_core_season_in = df_core_season_3YR)
+      df_b_attain_exceed <- f_no_exceed_x_yrs(df_in = df_b_exceed, my_end_date = input_end_date, n_yrs = 3, exceed_col = "stnd_exceed")
+      
+# Logic c ====
+      
+      df_c_exceed <- f_stnd_exceed(df_c)
+      df_c_impair <- f_impair(df_c_exceed, n_exceed_limit = 2, past_x_yrs = 100, my_end_date = input_end_date)
+      df_c_attain_core <- f_core(df_in = df_c_exceed, df_core_indicator_in = df_core_indicator, df_core_season_in = df_core_season_3YR)
+      df_c_attain_exceed <- f_no_exceed_x_yrs(df_in = df_c_exceed, my_end_date = input_end_date, n_yrs = 3, exceed_col = "stnd_exceed")
+      
+# Logic d ====
+      
+      df_d_exceed <- f_stnd_exceed(df_d)
+      df_d_impair <- f_binomial(df_d_exceed, binom_var = "stnd_exceed")
+      df_d_attain_core <- f_core(df_in = df_d_exceed, df_core_indicator_in = df_core_indicator, df_core_season_in = df_core_season)
+      df_d_attain_exceed <- f_max_exceed(df_in = df_d_exceed, exceed_col = "stnd_exceed")
+      
+# Logic f ====
+      
+      df_f <- df_f %>% filter(Aggregation == "Max")
+      df_f_exceed <- f_stnd_exceed(df_f)
+      df_f_impair <- f_impair(df_f_exceed, n_exceed_limit = 2, past_x_yrs = 3, my_end_date = input_end_date)
+      
+      # Special Case for E Coli Attainment (Exceedence Outside 3 Year Window)
+      df_f_impair_GT3YR <- f_impair(df_f_exceed, n_exceed_limit = 2, past_x_yrs = 1000, my_end_date = input_end_date)
+      
+      df_f_attain_core <- f_core(df_in = df_f_exceed, df_core_indicator_in = df_core_indicator, df_core_season_in = df_core_season_3YR)
+      df_f_attain_exceed <- f_no_exceed_x_yrs(df_in = df_f_exceed, my_end_date = input_end_date, n_yrs = 3, exceed_col = "stnd_exceed")
+      
+      
+# Logic g ====
+      
+      df_g <- df_g %>% filter(Aggregation == "Geometric Mean")
+      df_g2 <- f_geo_mean(df_in = df_g)
+      df_g_exceed <- f_stnd_exceed(df_g2)
+      df_g_impair <- f_impair(df_g_exceed %>% mutate(Condition = NA, impair_logic = "g"), 
+                              n_exceed_limit = 2, past_x_yrs = 100, my_end_date = input_end_date)
+      df_g_attain_core <- f_core(df_in = df_g_exceed, df_core_indicator_in = df_core_indicator, df_core_season_in = df_core_season)
+      df_g_attain_exceed <- f_no_exceed_x_yrs(df_in = df_g_exceed, my_end_date = input_end_date, n_yrs = 3, exceed_col = "stnd_exceed")
+      
+      
+# Logic h ====
+      
+      df_h_exceed <- f_stnd_exceed(df_h)
+      df_h_impair <- f_binomial(df_h_exceed, binom_var = "stnd_exceed")
+      df_h_attain_core <- f_core(df_in = df_h_exceed, df_core_indicator_in = df_core_indicator, df_core_season_in = df_core_season)
+      df_h_attain_exceed <- f_max_exceed(df_in = df_h_exceed, exceed_col = "stnd_exceed")
+      
+# Logic i ====
+      
+      df_i2 <- f_ann_mean(df_in = df_i)
+      df_i_exceed <- f_stnd_exceed(df_i2)
+      df_i_impair <- f_impair(df_i_exceed %>% mutate(week_of_year = 26, impair_logic = "i"), 
+                              n_exceed_limit = 2, past_x_yrs = 100, my_end_date = input_end_date)
+      df_i_attain_exceed <- f_no_exceed_x_yrs(df_in = df_i_exceed %>% mutate(week_of_year = 26), 
+                                              my_end_date = input_end_date, n_yrs = 3, exceed_col = "stnd_exceed")
+      
+      
+# Logic j ====
+      
+      df_j2 <- f_90_percentile(df_j)
+      
+      df_j_exceed <- f_stnd_exceed(df_j2)
+      df_j_impair <- f_impair(df_j_exceed %>% mutate(my_year = year(my_date), week_of_year = week(my_date), Condition = NA, impair_logic = "j"), 
+                              n_exceed_limit = 2, past_x_yrs = 100, my_end_date = input_end_date)
+      df_j_attain_exceed <- f_no_exceed_x_yrs(df_in = df_j_exceed %>% mutate(my_year = year(my_date), week_of_year = week(my_date)), 
+                                              my_end_date = input_end_date, n_yrs = 3, exceed_col = "stnd_exceed")
+      
+      
+      
+# Logic k ====
+      
+      df_k2 <- f_median(df_in = df_k)
+      df_k_exceed <- f_stnd_exceed(df_k2)
+      df_k_impair <- f_impair(df_k_exceed %>% mutate(Condition = NA, impair_logic = "k"), 
+                              n_exceed_limit = 2, past_x_yrs = 100, my_end_date = input_end_date)
+      
+      
+      df_k_attain_exceed <- f_no_exceed_x_yrs(df_in = df_k_exceed, my_end_date = input_end_date, n_yrs = 3, exceed_col = "stnd_exceed")
+      
+      
+      
+      
+# Combine all Exceeds ====
+      
+      df_exceed <- bind_rows(
+            
+            df_a_exceed,
+            df_b_exceed,
+            df_c_exceed,
+            df_d_exceed,
+            df_f_exceed,
+            df_g_exceed,
+            df_h_exceed,
+            df_i_exceed,
+            df_j_exceed,
+            df_k_exceed
+            
+      )
+      
+      dim(df_exceed)
+      dim(df_exceed %>% unique())
+      
+      
+# Combine Impair ====
+      
+      df_impair <- bind_rows(
+            
+            # Binomial impairment function not saving impairment logic - fix there instead of here?
+            df_a_impair %>% mutate(impair_logic = "a"),
+            df_b_impair,
+            df_c_impair,
+            df_d_impair %>% mutate(impair_logic = "d"),
+            df_f_impair,
+            df_g_impair,
+            df_h_impair %>% mutate(impair_logic = "h"),
+            df_i_impair,
+            df_j_impair,
+            df_k_impair
+            
+      )
+      
+      # Worst case Impairment ====
+      df_impair <- f_impair_worst_case(df_in = df_impair)
+      
+      
+      # Dissolved Oxygen Special Case ====
+      
+      # Get DO data
+      df_impair_do <- df_impair %>% filter(grepl("OXY", CharacteristicName))
+      
+      # Remove From Impair
+      df_impair <- df_impair %>% anti_join(df_impair_do)
+      
+      # Run DO Logic
+      df_impair_do <- f_impair_do_special_case(df_impair_do)
+           
+      # Join Back
+      df_impair <- bind_rows(df_impair, df_impair_do)
+      
+      
+# Combine Attains ====
+      # Join Core and Exceeds ====
+      df_attain_core <- bind_rows(
+            
+            df_a_attain_core,
+            df_b_attain_core,
+            df_c_attain_core,
+            df_d_attain_core,
+            df_f_attain_core,
+            df_h_attain_core
+      ) %>% 
+            
+            # Some WBID x CharacteristicName x Desig_Use combos go through multiple impairment logic flows
+            # and therefore get duplicated - do a unique to remove these... not needed for attain seasonal core
+            unique() %>% 
+            
+            mutate(attains_core = 
+                         case_when(
+                               
+                               # If it is not core seasonal parameter (is_core == 0), then it automatically attains for seasonal
+                               is_core == 0 & is.na(attains_core) ~ 1,
+                               
+                               # If it is core, but attains core is missing, then there is not data (past 3 yrs), and can not attain seasonal
+                               is_core == 1 & is.na(attains_core) ~ 0,
+                               
+                               TRUE ~ attains_core
+                               
+                         ))
+
+      
+      df_attain_exceed <- bind_rows(
+            
+            df_a_attain_exceed %>% mutate(impairment_logic = "a"),
+            df_b_attain_exceed %>% mutate(impairment_logic = "b"),
+            df_c_attain_exceed %>% mutate(impairment_logic = "c"),
+            df_d_attain_exceed %>% mutate(impairment_logic = "d"),
+            df_f_attain_exceed %>% mutate(impairment_logic = "f"),
+            df_g_attain_exceed %>% mutate(impairment_logic = "g"),
+            df_h_attain_exceed %>% mutate(impairment_logic = "h"),
+            df_i_attain_exceed %>% mutate(impairment_logic = "i"),
+            df_j_attain_exceed %>% mutate(impairment_logic = "j"),
+            df_k_attain_exceed %>% mutate(impairment_logic = "k")
+            
+      )
+
+      df_attain <- full_join(
+      
+            df_attain_exceed,
+            df_attain_core
+            
+      ) %>% 
+            
+            # If NA attains_core, it doesn't have to attain core seasonal and wasn't in file (ex logic j, k) - automatically attains = 1
+            mutate(attains_core = ifelse(is.na(attains_core), 1, attains_core)) %>% 
+            
+            # if NA attain_exceeds, there weren't enough samples (past 3 years) - so attain_exceeds = 0
+            mutate(attain_exceeds = ifelse(is.na(attain_exceeds), 0, attain_exceeds))
+      
+      
+      # Determine Overall Attainment
+      df_attain <- df_attain %>% 
+            mutate(attain = case_when(
+                  
+                  attains_core == 0 ~ 0,
+                  attain_exceeds == 0 ~ 0,
+
+                  TRUE ~ 1
+                  
+            )) 
+      
+      # Special E Coli Attain Logic (If Exceed > 3 Yrs Ago, Must Meet Seasonal Requirments) ====
+      df_attain <- f_attain_e_coli_special_case(df_in = df_attain, df_f_impair_GT3YR = df_f_impair_GT3YR, df_core_season_3YR = df_core_season_3YR)
+      
+      # Save for Delist - Before Run Worst Case Attain - Need to Run Worst Case Delist ====
+      df_delist <- df_attain
+      
+      # Worst Case Attain ====
+      df_attain <- f_attain_worst_case(df_attain)
+      
+      # Ignore DO SAT for Anything Other Than Impair
+      df_attain <- df_attain %>% filter(CharacteristicName != "DISSOLVED OXYGEN SATURATION")
+            
+      
+# Combine Impair & Attains ====
+
+      df_ia <- full_join(
+            
+            df_impair %>% select(WBID, CharacteristicName, Desig_Use, n_exceedences, impaired),
+            df_attain %>% select(WBID, CharacteristicName, Desig_Use, Q1, Q2, Q3, Q4, attains_core, attain_exceeds, attain)
+            
+      ) %>% 
+            
+            # Not on Core Seasonal List (so attain core = 1 by default) & Not Enough Samples to Determine Attain Exceeds i.e. NA attain
+            # So attain = 0 by default
+            mutate(attain = ifelse(is.na(attain) & !is.na(impaired), 0, attain)) %>% 
+      
+            # Missing impaired and all attain = 0 (already filled in due to missing data past 3 years) - due to no data past 3 years - 
+            # Need this to be inconclusive, to attain = 0 and impair = 0 so set impair = 0 (which is technically true!)
+            mutate(impaired = ifelse(is.na(impaired), 0, impaired))
+            
+      
+# Determine Inconclusive ====
+      
+      df_iai <- df_ia %>% 
+      
+            mutate(inconclusive = case_when(
+                  
+                  impaired == 1 ~ 0,
+                  attain == 1 ~ 0,
+                  
+                  TRUE ~ 1
+                  
+            ))
+      
+# Delist ====
+      
+      # Delist Logic
+      df_delist <- df_delist %>% 
+            
+            select(WBID, CharacteristicName, Desig_Use, n_samples, impairment_logic, attain) %>% 
+            
+            # If NA n_samples, there weren't enough samples to determine attain, so attain = 0 by default and can not delist: set n_samples to 0
+            mutate(n_samples = ifelse(is.na(n_samples), 0, n_samples)) %>% 
+            
+            mutate(delist = case_when(
+                  
+                  impairment_logic %in% c("g", "i", "j", "k") & n_samples >= 2 & attain == 1 ~ 1,
+                  impairment_logic %in% c("b", "c", "f") & n_samples >= 3 & attain == 1 ~ 1,
+                  impairment_logic %in% c("a", "h") & n_samples >= 10 & attain == 1 ~ 1,
+                  impairment_logic %in% c("d") & n_samples >= 20 & attain == 1 ~ 1,
+                  TRUE ~ 0
+            ))
+      
+      # Worst Case Delist (0 = worst case - do not delist) ====
+      df_delist <- df_delist %>% 
+            select(WBID, CharacteristicName, Desig_Use, n_samples, delist) %>% 
+            # Ascending Sort on delist (0, 1) because 0 is worst case
+            arrange(WBID, CharacteristicName, Desig_Use, delist) %>% 
+            group_by(WBID, CharacteristicName, Desig_Use) %>% 
+            slice(1) %>% 
+            select(-n_samples)
+      
+      
+      df_iaid <- df_iai %>% 
+            
+            left_join(df_delist) %>% 
+            
+            # delist NAs due to CharacteristicName (SSC, DO SAT) - Missing From Input File - Not Seasonal Core & Not Enough Samples
+            # These are and will all be not attaining, so automatically no to delist (delist = 0)
+            mutate(delist = ifelse(is.na(delist), 0, delist))
+
+      return(list(df_impair, df_attain, df_exceed, df_iaid, df100, df_delist))
+      
+      }
+      
+})      
+
+```
+
+##### The value boxes are colored by the difference between the R-Calculator results and the historical assessment year seleted on the 'Historical Assessments' page.  However, the plots and tables display the results for the R-Calculator assessment regardless of historical year chosen.  
+
+##### **Value box colors indicate:**  
+1.  Red = More than historical year selected  
+2.  Yellow = Same as the historical year selected  
+3.  Green = Less than the historical year selected  
+
+##### **Historical Selection Results:**  
+##### **Note:**  All comparisons between historical and current are for *Phase I parameters only!*  
+```{r rt_wbid_impaired_curr_assess_page, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderText(paste( "Impaired Waterbodies: ", tot_wbid_impaired(), sep = ""))
+
+```
+
+```{r rt_tot_impairments_curr_assess_page, warning=TRUE, message=FALSE, echo=FALSE} 
+
+renderText(paste( "Total Waterbody-Use-Param Impairments: ", tot_impairments(), sep = ""))
+
+```
+
+```{r rt_lake_acres_impaired_curr_assess_page, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderText(paste("Lake Acres Impaired: ", cy_lake_acres(), sep = ""))
+
+```
+
+```{r rt_stream_miles_impaired_curr_assess_page, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderText(paste("Stream Miles Impaired: ", cy_reach_distance(), sep = ""))
+
+```
+
+```{r wrangle_final_results, warning=TRUE, message=FALSE, echo=FALSE} 
+
+# Prior Year results
+py_results <- qb_attains_2 %>%
+      dplyr::filter(ASSESSMENT_YEAR == max(ASSESSMENT_YEAR)) %>%
+      dplyr::rename(WBID = ASSESSMENT_UNIT_ID, CharacteristicName = PARAM_NAME, Desig_Use = DESIG_USE, Prior_Assess_Status = STATUS) %>%
+      dplyr::select(-ASSESSMENT_YEAR) %>%
+      # Change Dissolved Oxygen so it matches the calculator label, which has the (DO) attached
+      dplyr::mutate(CharacteristicName = ifelse(CharacteristicName == "DISSOLVED OXYGEN", "DISSOLVED OXYGEN (DO)", CharacteristicName)) %>%
+      dplyr::select(WBID, CharacteristicName, Desig_Use, Prior_Assess_Status) %>%
+      unique()
+
+cy_results_2 <- reactive({ 
+      
+      if(input$runCalc == 0) {
+
+            cy_results_2 <- data.frame()
+            
+      } else {
+      
+            cy_results_2 <- 
+
+                  full_join(df_iaid()[[4]], py_results) %>%
+                  dplyr::select(WBID, CharacteristicName, Desig_Use, impaired, attain, inconclusive, delist, Prior_Assess_Status) %>%
+                  dplyr::mutate(Prior_Assess_Status = ifelse(is.na(Prior_Assess_Status), "Not_Reported", Prior_Assess_Status)) %>%
+            
+            # Add Lake Acres and Stream Miles to the current year results
+                  left_join(la_rd_join, by = c("WBID" = "ASSESSMENT_UNIT_ID")) %>%
+                  dplyr::mutate(lake_acres = ifelse(is.na(lake_acres), 0, lake_acres)) %>%
+                  dplyr::mutate(reach_distance = ifelse(is.na(reach_distance), 0, reach_distance)) %>%
+
+                  dplyr::mutate(Status = case_when (
+                        
+                        # Prior assessment showed no results
+                        Prior_Assess_Status == "Not_Reported" & attain == 1 ~ "New Attain",
+                        Prior_Assess_Status == "Not_Reported" & inconclusive == 1 ~ "New Inconclusive",
+                        Prior_Assess_Status == "Not_Reported" & impaired == 1 ~ "New Impairment",
+                                    
+                        # Prior assessment resulted in 'Inconclusive'
+                        Prior_Assess_Status == "Inconclusive" & attain == 1 ~ "New Attain",
+                        Prior_Assess_Status == "Inconclusive" & inconclusive == 1 ~ "Repeat Inconclusive",
+                        Prior_Assess_Status == "Inconclusive" & impaired == 1 ~ "New Impairment",
+                                    
+                        # Prior assessment resulted in 'Attaining'
+                        Prior_Assess_Status == "Attaining" & attain == 1 ~ "Repeat Attain",
+                        Prior_Assess_Status == "Attaining" & inconclusive == 1 ~ "New Inconclusive",
+                        Prior_Assess_Status == "Attaining" & impaired == 1 ~ "New Impairment",
+                                    
+                        # Prior assessment resulted in 'Impaired'
+                        Prior_Assess_Status == "Impaired" & attain == 1 & delist == 1 ~ "New Delisting",
+                        Prior_Assess_Status == "Impaired" & inconclusive == 1 ~ "Repeat Impairment",
+                        Prior_Assess_Status == "Impaired" & impaired == 1 ~ "Repeat Impairment",
+                        Prior_Assess_Status == "Impaired" & attain == 1 & delist == 0 ~ "Repeat Impairment",
+                        
+                        # Current assessments = NA; this is due to no test samples taken on previously impaired waters
+                        Prior_Assess_Status == "Impaired" & is.na(attain) & is.na(delist) ~ "Repeat Impairment"
+                                    
+                        )
+                  ) %>%
+                        
+                  dplyr::mutate(Result = case_when (
+                        
+                        grepl("New Impairment", Status) ~ "Impaired",
+                        grepl("Repeat Impairment", Status) ~ "Impaired",
+                                    
+                        grepl("New Attain", Status) ~ "Attaining",
+                        grepl("Repeat Attain", Status) ~ "Attaining",
+                                    
+                        grepl("New Inconclusive", Status) ~ "Inconclusive",
+                        grepl("Repeat Inconclusive", Status) ~ "Inconclusive",
+                                    
+                        grepl("New Delisting", Status) ~ "Delist"
+                                    
+                        )
+                  ) %>%
+                  unique()
+      }
+})
+
+
+```
+
+```{r create_curr_assess_plots_and_table_datasets, warning=TRUE, message=FALSE, echo=FALSE}
+
+# https://www.color-hex.com/
+fill_curr <- c('#bd0909', '#605e5e')
+
+# Current Assessment data for Total Impairments barplot
+bp_param_curr_assess <- reactive({ 
+      
+      if(input$runCalc == 0) {
+      
+            bp_param_curr_assess <- data.frame()
+      
+      } else {
+
+            bp_param_curr_assess <-
+                  cy_results_2() %>%
+                  ungroup() %>%
+                  unique() %>%
+                  dplyr::filter(!(CharacteristicName == "null")) %>%  
+                  dplyr::filter(Result == "Impaired") %>%
+                  dplyr::group_by(Status, CharacteristicName) %>%
+                  dplyr::summarize(Quantity = n())
+      }
+})
+ 
+
+# Current Assessment barplot for impairments by designated use
+bp_du_curr_assess <- reactive({
+      
+      if(input$runCalc == 0) {
+            
+            bp_du_curr_assess <- data.frame()
+            
+      } else {   
+            
+            bp_du_curr_assess <-
+                  cy_results_2() %>% 
+                  ungroup() %>%
+                  dplyr::filter(Result == "Impaired") %>%
+                  dplyr::group_by(Status, Desig_Use) %>%
+                  dplyr::summarize(Quantity = n())
+            
+      }
+})  
+
+
+# Current Assessment Net WBID Impairment base table; this base table is joined with lake acres and stream miles
+
+dt_wbid_data_curr_assess0 <- reactive({ 
+      
+      if(input$runCalc == 0) {
+            
+            dt_wbid_data_curr_assess0 <- data.frame()
+            
+      } else {  
+            
+            dt_wbid_data_curr_assess0 <-
+                  cy_results_2() %>% 
+                        dplyr::ungroup() %>%
+                        dplyr::filter(Result == "Impaired") %>%
+                        dplyr::group_by(WBID) %>%
+                        dplyr::summarize(Quantity = n()) %>%
+                        dplyr::arrange(desc(Quantity)) %>%
+                        dplyr::select(WBID, Quantity) %>%
+                        unique()
+      }
+})
+
+
+# Lake acre and stream mile data to join with the Net WBID impairment base table
+la_rd_curr <- reactive({
+
+      if(input$runCalc == 0) {
+
+            la_rd_curr <- data.frame()
+
+      } else {
+
+            la_rd_curr <-
+                  cy_results_2() %>%
+                        ungroup() %>%
+                        dplyr::select(WBID, lake_acres, reach_distance) %>%
+                        unique()
+      }
+})
+
+# Current Assessment Net WBID impairment table for display on the Current Assessment page; here we join the lake acres and stream miles to the base table
+dt_wbid_data_curr_assess <- reactive({
+
+      if(input$runCalc == 0) {
+
+            dt_wbid_data_curr_assess <- data.frame()
+
+      } else {
+
+            dt_wbid_data_curr_assess <- left_join(dt_wbid_data_curr_assess0(), la_rd_curr()) %>%
+                  dplyr::rename(Lake_Acres = lake_acres, Stream_Miles = reach_distance, Num_Impairs = Quantity)
+
+      }
+})
+      
+
+# Current Assessment table for total impairments
+dt_param_impairs_curr_assess <-  reactive({ 
+      
+      if(input$runCalc == 0) {
+            
+            dt_param_impairs_curr_assess <- data.frame()
+            
+      } else {  
+      
+      
+            dt_param_impairs_curr_assess <- cy_results_2() %>% 
+                                                dplyr::filter(Result == "Impaired") %>%
+                                                unique()
+      }
+})
+
+
+# Current Assessment table with Delistings
+curr_assess_delistings <- reactive({
+      
+      if(input$runCalc == 0) {
+            
+            curr_assess_delistings <- data.frame()
+            
+      } else {  
+            
+            curr_assess_delistings <- cy_results_2() %>% 
+                  dplyr::filter(Prior_Assess_Status == "Impaired" & Result == "Delist") %>%
+                  dplyr::select(WBID, CharacteristicName, Desig_Use, Prior_Assess_Status, lake_acres, reach_distance) %>%
+                  dplyr::rename(Lake_Acres = lake_acres, Stream_Miles = reach_distance) %>% unique()
+            
+      } 
+})
+
+```
+
+```{r calc_curr_assess_metrics, warning=TRUE, message=FALSE, echo=FALSE}
+
+# Current Assessment lake acres impaired
+curr_assess_lake_acres <- reactive({ 
+      
+      if(input$runCalc == 0) {
+      
+            curr_assess_lake_acres <- "--"
+            
+      } else {
+            
+            curr_assess_lake_acres <- sum(dt_wbid_data_curr_assess()$Lake_Acres)
+            
+      }
+})
+            
+# Current Assessment stream miles impaired            
+curr_assess_reach_distance <- reactive({ 
+      
+      if(input$runCalc == 0) {
+      
+            curr_assess_reach_distance <- "--"
+            
+      } else {            
+            
+            curr_assess_reach_distance <- sum(dt_wbid_data_curr_assess()$Stream_Miles)
+            
+      }
+})
+            
+# Current Assessment - Net WBID Impairments         
+curr_assess_net_wbid_impairs <- reactive({ 
+      
+      if(input$runCalc == 0) {
+      
+            curr_assess_net_wbid_impairs <- "--"
+            
+      } else {              
+            
+            curr_assess_net_wbid_impairs <-
+
+                  nrow(dt_wbid_data_curr_assess())
+      
+      }
+})
+
+# Current Assessment - Total Impairments
+curr_assess_tot_impairs <- reactive({ 
+      
+      if(input$runCalc == 0) {
+      
+            curr_assess_tot_impairs <- "--"
+            
+      } else {              
+            
+            curr_assess_tot_impairs <- sum(bp_param_curr_assess()$Quantity)
+      }
+})
+
+
+            
+
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Net WBID Impairments
+```{r vb_net_wbid, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderValueBox({
+
+      valueBox(curr_assess_net_wbid_impairs(),
+            icon = "",
+            color = ifelse(curr_assess_net_wbid_impairs() > tot_wbid_impaired(), "#bd0909",
+                        ifelse(curr_assess_net_wbid_impairs() == tot_wbid_impaired(), "#FFD700",
+                              ifelse(curr_assess_net_wbid_impairs() == "--", "#cecece",
+                                    "#84c539")))
+
+      )
+})
+
+```
+
+### Total Waterbody-Use-Param Impairments  
+```{r vb_total_impair, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderValueBox({
+      
+      valueBox(curr_assess_tot_impairs(),
+            icon = "",
+            color = ifelse(curr_assess_tot_impairs() > tot_impairments(), "#bd0909", 
+                        ifelse(curr_assess_tot_impairs() == tot_impairments(), "#FFD700",
+                              ifelse(curr_assess_tot_impairs() == "--", "#cecece",
+                                    "#84c539")))
+            
+      )
+})
+
+
+```
+
+### Lake Acres Impaired
+```{r vb_la_impaired, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderValueBox({
+      
+      valueBox(curr_assess_lake_acres(),
+            icon = "",
+            color = ifelse(curr_assess_lake_acres() > cy_lake_acres(), "#bd0909", 
+                        ifelse(curr_assess_lake_acres() == cy_lake_acres(), "#FFD700",
+                              ifelse(curr_assess_lake_acres() == "--", "#cecece",
+                                    "#84c539")))
+            
+      )
+})
+
+```
+
+### Stream Miles Impaired
+```{r vb_sm_impaired, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderValueBox({
+      
+      valueBox(curr_assess_reach_distance(),
+            icon = "",
+            color = ifelse(curr_assess_reach_distance() > cy_reach_distance(), "#bd0909", 
+                        ifelse(curr_assess_reach_distance() == cy_reach_distance(), "#FFD700",
+                              ifelse(curr_assess_reach_distance() == "--", "#cecece",
+                                    "#84c539")))
+            
+      )
+})
+
+
+```
+
+Column {.tabset}
+-----------------------------------------------------------------------
+
+### Distribution of Impairments by Parameter
+
+```{r bp_curr_assess_params, warning=TRUE, message=FALSE, echo=FALSE}
+
+# Current assessment plot 1: ca_p1
+renderPlotly ({
+      
+      validate(
+            need(input$runCalc != 0, message = "Plot will populate once the R-Calculator is run.")
+      )
+
+      bp_param_impairs_curr_assess <- ggplot(bp_param_curr_assess(), aes(x = reorder(CharacteristicName, Quantity), y = Quantity, fill = Status)) +
+            geom_bar(stat = "identity") +
+            theme_bw() +
+            scale_fill_manual(values = fill_curr) +
+            labs(x = "", y = "Quantity") +
+            ggtitle("Calculator Impairments by Parameter") +
+            theme(
+                  plot.title = element_text(hjust = 0.4, size = 11)
+            ) +
+            coord_flip()
+
+      ggplotly(bp_param_impairs_curr_assess)
+
+})
+
+
+```
+
+### Distribution of Impairments by Designated Use 
+
+```{r bp_curr_assess_du, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderPlotly ({
+
+      validate(
+            need(input$runCalc != 0, message = "Plot will populate once the R-Calculator is run.")
+      )
+      
+      bp_du_impairs_curr_assess <- ggplot(bp_du_curr_assess(), aes(x = reorder(Desig_Use, Quantity), y = Quantity, fill = Status)) +
+            geom_bar(stat = "identity") +
+            theme_bw() +
+            scale_fill_manual(values = fill_curr) +
+            labs(x = "", y = "Quantity") +
+            ggtitle("Calculator Impairments by Designated Use") +
+            theme(
+                  plot.title = element_text(hjust = 0.4, size = 11)
+            ) +
+            coord_flip()
+
+      ggplotly(bp_du_impairs_curr_assess)
+
+})
+
+
+```
+
+### Table: Waterbody Impairment Quantities 
+
+```{r dt_curr_assess_wbid_impairs, warning=TRUE, message=FALSE, echo=FALSE}
+
+n_col_ca <- reactive ({ ncol(dt_wbid_data_curr_assess()) - 1 })
+
+renderDataTable({
+      
+      validate(
+            
+            need(input$runCalc != 0, message = "Table will populate once the R-Calculator is run.")
+      
+      )
+
+      DT::datatable(dt_wbid_data_curr_assess(),
+            fillContainer = TRUE,
+            extensions = c('FixedColumns', 'Scroller', 'KeyTable', "Buttons"),
+            options = list(
+                  dom = "Bfrtip",
+                  buttons = c('csv', 'excel'),     
+                  deferRender = TRUE,
+                  scrollX = TRUE,
+                  scrollY = 100,
+                  scroller = TRUE,
+                  fixedHeader = TRUE,
+                  keys = TRUE,
+                  searchHighlight = TRUE,
+                  columnDefs = list(list(className = 'dt-center', targets = 0:n_col_ca()))
+            ),
+            rownames = FALSE
+      )
+})
+
+```
+
+### Table: Current Assessment Delistings
+
+```{r dt_delistings, warning=TRUE, message=FALSE, echo=FALSE}
+
+n_col_delist <- reactive({ ncol(curr_assess_delistings()) - 1 })
+
+renderDataTable({
+      
+      validate(
+      
+            need(input$runCalc != 0, message = "Table will populate once the R-Calculator is run.")
+      
+      )
+
+      DT::datatable(curr_assess_delistings(),
+            fillContainer = TRUE,
+            extensions = c('FixedColumns', 'Scroller', 'KeyTable', "Buttons"),
+            options = list(
+                  dom = "Bfrtip",
+                  buttons = c('csv', 'excel'),     
+                  deferRender = TRUE,
+                  scrollX = TRUE,
+                  scrollY = 100,
+                  scroller = TRUE,
+                  fixedHeader = TRUE,
+                  keys = TRUE,
+                  searchHighlight = TRUE,
+                  columnDefs = list(list(className = 'dt-center', targets = 0:n_col_delist()))
+            ),
+            rownames = FALSE
+      )
+})
+
+
+```
+
+
+
+
+Decision Summary Report {data-orientation=rows}
+=======================================================================
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+#### **Percentage Differences to Selected Year and Current**  
+  
+```{r display_year_selected_dsr, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderText(paste("Year selected for comparison: ", input$assessYear, sep = ""))
+
+```
+
+```{r percent_change_net_wbid, warning=TRUE, message=FALSE, echo=FALSE}
+
+perc_change_net_wbid <- reactive({
+      
+      validate(
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "Net WBID Impairments: --")
+      )
+  
+      round((100 * (curr_assess_net_wbid_impairs() - tot_wbid_impaired()) / tot_wbid_impaired()), 1)
+  
+})
+
+renderText(paste("Net WBID Impairments: ", perc_change_net_wbid(), "%", sep = ""))
+
+```
+
+```{r percent_change_tot_impairs, warning=TRUE, message=FALSE, echo=FALSE}
+
+perc_change_tot_impairs <- reactive({
+      
+      validate(
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "Total Waterbody-Use-Param Impairments:  --")
+      )
+  
+      round((100 * (curr_assess_tot_impairs() - tot_impairments()) / tot_impairments()), 1)
+  
+})
+
+
+renderText(paste("Total Waterbody-Use-Param Impairments: ", perc_change_tot_impairs(), "%", sep = ""))
+      
+
+```
+
+```{r percent_change_lake_acres, warning=TRUE, message=FALSE, echo=FALSE}
+
+perc_change_lake_acres <- reactive({
+      
+      validate(
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "Lake Acres: --")
+      )    
+  
+      round((100 * (curr_assess_lake_acres() - cy_lake_acres()) / cy_lake_acres()), 1)
+  
+})
+
+renderText(paste("Lake Acres: ", perc_change_lake_acres(), "%", sep = ""))
+
+```
+
+```{r percent_change_stream_miles, warning=TRUE, message=FALSE, echo=FALSE}
+
+perc_change_stream_miles <- reactive({
+      
+      validate(
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "Stream Miles: --")
+      )  
+  
+      round((100 * (curr_assess_reach_distance() - cy_reach_distance()) / cy_reach_distance()), 1)
+  
+})
+
+renderText(paste("Stream Miles: ", perc_change_stream_miles(), "%", sep = ""))
+
+```
+
+##### **Note:**  If you re-loaded the calculator and the Decision Summary was removed, then you forgot to re-run the R-Calculator on the 'Current Assessment' page.  If the Decision Summary will not repopulate, then the data load and calculator run are not in sync and you should relaunch the application.  
+  
+
+Row
+-----------------------------------------------------------------------
+
+```{r find_wbid_total_impairs_never_sampled, warning=TRUE, message=FALSE, echo=FALSE}
+
+# cy_results_2 is a result of a full join between the current assessment data and the historical impaired data (ATTAINS); hence, anything with all NAs was on the historical impaired list but we did not see any samples in the the harmozized data against these.  
+never_sampled <- reactive({ 
+      
+      subset(cy_results_2(), is.na(attain) & is.na(impaired) & is.na(inconclusive) & is.na(delist) & Prior_Assess_Status == "Impaired") %>%
+      dplyr::select(WBID, CharacteristicName, Desig_Use) %>%
+      unique()
+      
+})
+
+# Show all combinations of WBID-CN-DU where we have samples.  Mark sample "Present." 
+df_harm_ns <- reactive({ user_tr_2() %>%
+            
+      dplyr::select(WBID, CharacteristicName, Desig_Use) %>%
+      dplyr::mutate(Harm_Data = rep("Present", nrow(user_tr_2()))) %>%
+      unique()  
+      
+})
+
+# Create a data frame for those WBIDs/Total impairments we believe no samples were taken against.      
+ns <- reactive({ never_sampled %>%
+            
+      dplyr::select(WBID, CharacteristicName, Desig_Use) %>%
+      unique()
+      
+})
+
+# Join the harmonized data marked as 'Present' to the suspected never sampled combinations.  Keep only the results with NAs = keep only those rows not tagged as 'Present.'  
+check_ns <- reactive({ left_join(never_sampled(), df_harm_ns()) %>%
+            
+                  dplyr::mutate(Sampled = ifelse(Harm_Data == "Present", 1, 0)) %>%
+                  # Remove any rows with "Present;" we keep only the NAS = no samples were seen in the harmonized data
+                  dplyr::filter(is.na(Sampled)) %>%
+                  # Filter to only Phase I parameters
+                  dplyr::filter(CharacteristicName %in% c("AMMONIA-NITROGEN","ARSENIC","BERYLLIUM","BORON","CADMIUM","CHLORINE","COPPER","DISSOLVED OXYGEN (DO)","ESCHERICHIA COLI","IRON","LEAD","MANGANESE","PH","PHOSPHORUS","SELENIUM","SUSPENDED SEDIMENT CONCENTRATION (SSC)","TEMPERATURE, WATER","ZINC")) %>%
+                  dplyr::filter(!(is.na(CharacteristicName))) %>%
+                  unique()
+      
+})
+
+# Number of net WBIDs in the historical file with no samples in the harmonized data
+ns_wbid <- reactive({ length(unique(check_ns()$WBID)) })
+
+perc_net_wbid_not_sampled <- reactive ({
+      
+      validate(
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = " --")
+      ) 
+      
+      round((100 * (ns_wbid()/tot_wbid_impaired())), 1)
+      
+})
+
+
+
+# Number of total impairments in the historical file with no samples in the harmonized data
+ns_total_impairs <- reactive({ nrow(check_ns()) })
+
+perc_total_impairs_not_sampled <- reactive ({
+      
+      validate(
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "--")
+      ) 
+      
+      round((100 * (ns_total_impairs()/tot_impairments())), 1)
+      
+})
+
+
+```
+
+### Impaired WBIDs not sampled (%)
+```{r vb_percent_net_wbid, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderValueBox({
+
+      validate(
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "--")
+      ) 
+      
+      valueBox(perc_net_wbid_not_sampled(), icon = "", color = '#605e5e')
+      
+})
+
+```
+
+### Total Impairments not sampled (%)
+```{r vb_percent_total_impairs, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderValueBox({
+      
+      validate(
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "--")
+      ) 
+      
+      valueBox(perc_total_impairs_not_sampled(), icon = "", color = '#605e5e')
+      
+})
+
+```
+
+
+Column 
+-----------------------------------------------------------------------
+
+### Table: Decision Summary
+
+```{r create_dec_summ_table, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderDataTable({
+      
+      # Do not display the Decision Summary Report unless the user has loaded data AND run the R-calculator.  Also, if they change dates they need to run load the data and re-run the R-Calculator...otherwise don't display the table.  IOW, display the table only when the data loaded and calculator run are synced.  
+      validate(
+      
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "Table will populate once data is loaded *and* the R-Calculator is run."
+            )
+      )
+
+      # Add dates to the report and rename to Lake_Acres and Stream_Miles
+      dec_summ_rep <- reactive({
+            
+            inp.sd2 <- isolate(input$startDate)
+            inp.ed2 <- isolate(input$endDate)
+
+            cy_results_2() %>%
+                  ungroup() %>%
+                  dplyr::filter(Result == "Impaired") %>%
+                  unique() %>%
+
+                  dplyr::rename(Lake_Acres = lake_acres, Stream_Miles = reach_distance) %>%
+
+                        dplyr::mutate(Assess_Start_Date = rep(inp.sd2, nrow(dt_param_impairs_curr_assess()))) %>%
+                        dplyr::mutate(Assess_End_Date = rep(inp.ed2, nrow(dt_param_impairs_curr_assess()))) %>%
+
+                  dplyr::select(Assess_Start_Date, Assess_End_Date, WBID, Desig_Use, CharacteristicName, Status, Lake_Acres, Stream_Miles)
+
+      })
+
+      n_col_dsr1 <- reactive({ ncol(dec_summ_rep()) - 1 })
+
+      DT::datatable(dec_summ_rep(),
+            fillContainer = TRUE,
+            extensions = c('FixedColumns', 'Scroller', 'KeyTable', "Buttons"),
+            options = list(
+                  dom = "Bfrtip",
+                  buttons = c('excel', 'csv'),     
+                  deferRender = TRUE,
+                  scrollX = TRUE,
+                  scrollY = 100,
+                  scroller = TRUE,
+                  fixedHeader = TRUE,
+                  keys = TRUE,
+                  searchHighlight = TRUE,
+                  columnDefs = list(list(className = 'dt-center', targets = 0:n_col_dsr1()))
+            ),
+            rownames = FALSE
+            
+      )
+}, server = FALSE)
+
+```
+
+
+Data for Troubleshooting {data-orientation=rows}
+=======================================================================
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+#### **Download Handlers**  
+##### 1. The user selected test results for the analysis can be downloaded from the 'Data Selection' page.  This dataset is the harmonized data entering the wrangling process.  
+
+##### 2. **Download Handler for 'df_100'**  This dataset is what has completed the wrangling process and is entered into the impairment logic process. 
+
+
+```{r remove_unecessary_columns_for_troubleshooting, warning=TRUE, message=FALSE, echo=FALSE}
+
+
+ts_df_100 <- reactive ({
+      
+      df_iaid()[[5]] %>% 
+            dplyr::mutate(standard = round(standard, 2)) %>%
+            dplyr::mutate(ResultMeasureValue = round(ResultMeasureValue, 2))
+
+})
+
+
+ts_df_impair <- reactive ({
+
+      df_iaid()[[1]] %>%
+            dplyr::mutate(pbinom = round(pbinom, 3))
+
+})
+
+
+ts_df_attain <- reactive ({
+      
+      df_iaid()[[2]] %>% 
+            dplyr::select(-Core, -meets_core)
+
+})
+
+
+ts_df_exceed <- reactive ({
+      
+      df_iaid()[[3]] %>% 
+            dplyr::select(-cas_qualifier_name, -my_date, -end_date) %>%
+            dplyr::mutate(standard = round(standard, 2)) %>%
+            dplyr::mutate(ResultMeasureValue = round(ResultMeasureValue, 2))
+
+})
+
+```
+
+
+```{r df100_download_handler, warning=TRUE, message=FALSE, echo=FALSE}
+
+downloadHandler(filename = function() {
+     paste('df100 ', Sys.Date(), '.csv', sep='')
+   },
+     content = function(file) {
+     write.csv(ts_df_100(), file, row.names = FALSE)
+   }
+)
+
+```
+
+##### 3. **Download Handler for 'df_impair'**  Data table summarizing impairments.  
+```{r df_impair_download_handler, warning=TRUE, message=FALSE, echo=FALSE}
+
+downloadHandler(filename = function() {
+     paste('df_impair ', Sys.Date(), '.csv', sep='')
+   },
+     content = function(file) {
+     write.csv(ts_df_impair(), file, row.names = FALSE)
+   }
+)
+
+```
+
+##### 4. **Download Handler for 'df_attain'**  Data table summarizing attainments.     
+```{r df_attain_download_handler, warning=TRUE, message=FALSE, echo=FALSE}
+
+downloadHandler(filename = function() {
+     paste('df_attain ', Sys.Date(), '.csv', sep='')
+   },
+     content = function(file) {
+     write.csv(ts_df_attain(), file, row.names = FALSE)
+   }
+)
+
+```
+
+##### 5. **Download Handler for 'df_exceed'**  Data table indicating whether or not result measurements exceeded standards.    
+```{r df_exceed_download_handler, warning=TRUE, message=FALSE, echo=FALSE}
+
+downloadHandler(filename = function() {
+     paste('df_exceed ', Sys.Date(), '.csv', sep='')
+   },
+     content = function(file) {
+     write.csv(ts_df_exceed(), file, row.names = FALSE)
+   }
+)
+
+```
+
+##### 6. **Download Handler for 'df_iaid'**  Data table summarizing overall results (impair, attain, inconclusive, delist).    
+```{r df_iaid_download_handler, warning=TRUE, message=FALSE, echo=FALSE}
+
+downloadHandler(filename = function() {
+     paste('df_iaid ', Sys.Date(), '.csv', sep='')
+   },
+     content = function(file) {
+     write.csv(df_iaid()[[4]], file, row.names = FALSE)
+   }
+)
+
+```
+
+Column {.tabset}
+-----------------------------------------------------------------------
+
+### Data for Impairment Logic (df100)
+
+```{r display_df100, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderDataTable({
+
+      # Do not display the Decision Summary Report unless the user has loaded data AND run the R-calculator.  Also, if they change dates they need to run load the data and re-run the R-Calculator...otherwise don't display the table.  IOW, display the table only when the data loaded and calculator run are synced.
+      validate(
+
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "Table will populate once data is loaded *and* the R-Calculator is run."
+
+            )
+      )
+
+      n_col_df100 <- reactive({ ncol(ts_df_100()) - 1 })
+
+      DT::datatable(ts_df_100(),
+            fillContainer = TRUE,
+            extensions = c('Scroller', 'FixedColumns', 'KeyTable', 'FixedHeader'),
+            options = list(
+                  pageLength = 25,
+                  deferRender = TRUE,
+                  scrollX = TRUE,
+                  scrollY = 200,
+                  scroller = TRUE,
+                  fixedHeader = TRUE,
+                  keys = TRUE,
+                  fixedColumns = list(leftColumns = 3),
+                  searchHighlight = TRUE,
+                  columnDefs = list(list(className = 'dt-center', targets = 0:n_col_df100()))
+            ),
+            rownames = FALSE
+
+      )
+
+})
+
+
+
+```
+
+### Impairment Results (df_impair)
+
+```{r display_df_impair, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderDataTable({
+
+      # Do not display the Decision Summary Report unless the user has loaded data AND run the R-calculator.  Also, if they change dates they need to run load the data and re-run the R-Calculator...otherwise don't display the table.  IOW, display the table only when the data loaded and calculator run are synced.
+      validate(
+
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "Table will populate once data is loaded *and* the R-Calculator is run."
+
+            )
+      )
+
+      n_col_df_impair <- reactive({ ncol(ts_df_impair()) - 1 })
+
+      DT::datatable(ts_df_impair(),
+            fillContainer = TRUE,
+            extensions = c('Scroller', 'FixedColumns', 'KeyTable', 'FixedHeader'),
+            options = list(
+                  pageLength = 25,
+                  deferRender = TRUE,
+                  scrollX = TRUE,
+                  scrollY = 200,
+                  scroller = TRUE,
+                  fixedHeader = TRUE,
+                  keys = TRUE,
+                  fixedColumns = list(leftColumns = 3),
+                  searchHighlight = TRUE,
+                  columnDefs = list(list(className = 'dt-center', targets = 0:n_col_df_impair()))
+            ),
+            rownames = FALSE
+
+      )
+
+})
+
+```
+
+### Attain Results (df_attain)
+
+```{r display_df_attain, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderDataTable({
+
+      # Do not display the Decision Summary Report unless the user has loaded data AND run the R-calculator.  Also, if they change dates they need to run load the data and re-run the R-Calculator...otherwise don't display the table.  IOW, display the table only when the data loaded and calculator run are synced.
+      validate(
+
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "Table will populate once data is loaded *and* the R-Calculator is run."
+
+            )
+      )
+
+      n_col_df_attain <- reactive({ ncol(ts_df_attain()) - 1 })
+
+      DT::datatable(ts_df_attain(),
+            fillContainer = TRUE,
+            extensions = c('Scroller', 'FixedColumns', 'KeyTable', 'FixedHeader'),
+            options = list(
+                  pageLength = 25,
+                  deferRender = TRUE,
+                  scrollX = TRUE,
+                  scrollY = 200,
+                  scroller = TRUE,
+                  autoWidth = TRUE,
+                  fixedHeader = TRUE,
+                  keys = TRUE,
+                  fixedColumns = list(leftColumns = 3),
+                  searchHighlight = TRUE,
+                  columnDefs = list(list(className = 'dt-center', targets = 0:n_col_df_attain()))
+            ),
+            rownames = FALSE
+
+      )
+
+})
+
+```
+
+### Exeedance Results (df_exceed)
+
+```{r display_df_exceed, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderDataTable({
+
+      # Do not display the Decision Summary Report unless the user has loaded data AND run the R-calculator.  Also, if they change dates they need to run load the data and re-run the R-Calculator...otherwise don't display the table.  IOW, display the table only when the data loaded and calculator run are synced.
+      validate(
+
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "Table will populate once data is loaded *and* the R-Calculator is run."
+
+            )
+      )
+
+      n_col_df_exceed <- reactive({ ncol(ts_df_exceed()) - 1 })
+
+      DT::datatable(ts_df_exceed(),
+            fillContainer = TRUE,
+            extensions = c('Scroller', 'FixedColumns', 'KeyTable', 'FixedHeader'),
+            options = list(
+                  pageLength = 25,
+                  deferRender = TRUE,
+                  scrollX = TRUE,
+                  scrollY = 200,
+                  scroller = TRUE,
+                  autoWidth = TRUE,
+                  fixedHeader = TRUE,
+                  keys = TRUE,
+                  fixedColumns = list(leftColumns = 3),
+                  searchHighlight = TRUE,
+                  columnDefs = list(list(className = 'dt-center', targets = 0:n_col_df_exceed()))
+            ),
+            rownames = FALSE
+
+      )
+
+})
+
+```
+
+### Combined Results (df_iaid)
+
+```{r display_df_iaid, warning=TRUE, message=FALSE, echo=FALSE}
+
+renderDataTable({
+
+      # Do not display the Decision Summary Report unless the user has loaded data AND run the R-calculator.  Also, if they change dates they need to run load the data and re-run the R-Calculator...otherwise don't display the table.  IOW, display the table only when the data loaded and calculator run are synced.
+      validate(
+
+            need(input$generateButton == input$runCalc & input$generateButton != 0 & input$runCalc != 0, message = "Table will populate once data is loaded *and* the R-Calculator is run."
+
+            )
+      )
+
+      n_col_dfiaid <- reactive({ ncol(df_iaid()[[4]]) - 1 })
+
+      DT::datatable(df_iaid()[[4]],
+            fillContainer = TRUE,
+            extensions = c('Scroller', 'FixedColumns', 'KeyTable', 'FixedHeader'),
+            options = list(
+                  pageLength = 25,
+                  deferRender = TRUE,
+                  scrollX = TRUE,
+                  scrollY = 200,
+                  scroller = TRUE,
+                  fixedHeader = TRUE,
+                  keys = TRUE,
+                  fixedColumns = list(leftColumns = 3),
+                  searchHighlight = TRUE,
+                  columnDefs = list(list(className = 'dt-center', targets = 0:n_col_dfiaid()))
+            ),
+            rownames = FALSE
+
+      )
+
+})
+
+```
+
+```{r gc, warning=TRUE, message=FALSE, echo=FALSE}
+gc(verbose = FALSE)
+```

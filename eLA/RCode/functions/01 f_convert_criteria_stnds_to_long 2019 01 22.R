@@ -1,0 +1,172 @@
+# This function converts criteria standards to long format
+
+# Inputs:   data frame 
+# Output:   data frames for mean, geo mean, median, max, min
+
+# df <- df_crit_stnds
+# df2 <- df_NP_stnds
+# df3 <- df_missing
+
+f_convert_criteria_stnds_to_long <- function(df, df2, df3){
+      
+# Constants ====
+      
+      # These are the parameters required for Phase I (~alphabetical order)
+      my_parameters <- c(
+            "Ammonia and ammonium", "Ammonia-nitrogen", "Arsenic", 
+            "Beryllium", "Boron", 
+            "Cadmium", "Chlorine", "Copper", 
+            "Escherichia coli", 
+            "Hardness, Ca, Mg", "Hardness, non-carbonate", "Total hardness",
+            "Iron", 
+            "Lead", 
+            "Manganese", 
+            "Nitrate", "Nitrite", "Nitrogen", "Kjeldahl nitrogen", "Nitrogen, mixed forms (NH3), (NH4), organic, (NO2) and (NO3)", "Organic Nitrogen", 
+            "Oxygen", "Dissolved oxygen (DO)", "Dissolved oxygen saturation",
+            "pH", "Phosphorus", 
+            "Selenium", "Suspended Sediment Concentration (SSC)", 
+            "Temperature, water", "Temperature, water, deg F", "Temperature, water, deg C", 
+            "Zinc")
+    
+      
+      
+# Data Wrangle ====
+      
+      # Input Data
+      df_standards <- df %>% 
+            
+            # Unnecessary Columns
+            select(-X1, -substance_cas_no, -substance_synonym, -comments) %>% 
+            
+            # Unnecessary Rows
+            dplyr::filter(substance_name %in% toupper(my_parameters))
+      
+      
+      # Coefficients
+      df_coeff <- df_standards %>% 
+            select(matches("_[a-z]$")) %>% 
+            # Note: if you see a negative one (-1) in the standards, it is a place-holder only - not a standard!
+            mutate_all(funs(ifelse(!is.na(.), -1, NA)))
+      
+      # Standards
+      df_standards <- df_standards %>% 
+            select(-matches("_[a-z]$"))
+      
+      # Recombine
+      df_standards <- bind_cols(df_standards, df_coeff)
+      
+      
+      # Convert to Long
+      df_standards <- df_standards %>% 
+
+            # Long format
+            gather(key = key, value = standard, -c(substance_name:unit_name)) %>% 
+            
+            # Keep only if there is a standard
+            filter(!is.na(standard)) %>% 
+            
+            # Extract variables
+            mutate(desig_use = gsub(pattern = "_.*", replacement = "", x = key)) %>% 
+            
+            mutate(acute_chronic = case_when(
+                  grepl("acute", key) ~ "acute",
+                  grepl("chronic", key) ~ "chronic")
+            ) %>% 
+            
+            mutate(last_word = word(key, -1, sep = "_")) %>% 
+            
+            mutate("Method" = ifelse(last_word %in% c("max","min", "mean", "90p"), last_word, NA)) %>% 
+            
+            # Remove intermediates
+            dplyr::select(-key, -last_word) %>% 
+            
+            # Uppercase (for use with Samples Data)
+            dplyr::mutate(desig_use = toupper(desig_use)) %>% 
+            dplyr::mutate(acute_chronic = toupper(acute_chronic)) %>% 
+            
+            # Remove Duplicates (From Coefficients)
+            unique()
+      
+      
+# Add N and P Standards From 2nd File ====
+      
+      df_NP <- df2 %>% 
+            
+            select(desig_use = STANDARD_ID, TN_ANNMEAN_MGL:TPO4_SSMAX_MGL) %>% 
+            unique() %>% 
+            
+            # Long
+            gather(key = Key, value = standard, -desig_use) %>% 
+            
+            # cas qualifier and Parameter
+            mutate(cas_substance_name = word(Key, 1, sep = "_")) %>% 
+            
+            # cas qualifier name
+            mutate(cas_qualifier_name = case_when(
+                  substr(cas_substance_name, start = 1, 1) == "T" ~ "TOTAL",
+                  substr(cas_substance_name, start = 1, 1) == "D" ~ "DISSOLVED",
+                  substr(cas_substance_name, start = 1, 1) == "S" ~ "SUSPENDED"
+            )) %>% 
+            
+            mutate(substance_name = case_when(
+                  cas_substance_name == "TN" ~ "NITROGEN",
+                  cas_substance_name == "TP" ~ "PHOSPHORUS",
+                  cas_substance_name == "TPO4" ~ "PHOSPHATE"
+            )) %>% 
+            
+            # Method
+            mutate(Method = word(Key, 2, sep = "_")) %>% 
+            mutate(Method = case_when(
+                  Method == "90PCT" ~ "90p",
+                  TRUE ~ tolower(Method)
+            )) %>% 
+            
+            # Units
+            mutate(unit_name = word(Key, 3, sep = "_")) %>% 
+            mutate(unit_name = case_when(
+                  unit_name == "MGL" ~ "MG/L",
+                  unit_name == "UGL" ~ "UG/L"
+            )) %>% 
+            
+            select(-Key, -cas_substance_name) %>%
+            #====================Todd added 2019-04-06===========================
+            # dplyr::mutate(standard = as.character(standard)) 
+            dplyr::mutate(standard = as.numeric(standard)) 
+      
+# Missing Standards ====
+      
+      # df_missing <- df3 %>% mutate(standard = as.character(standard))
+      df_missing <- df3 %>% mutate(standard = as.numeric(standard))
+      
+# Combine ====
+      
+      df_standards <- bind_rows(df_standards, df_NP, df_missing) 
+      
+      
+# Nitrite and Nitrate units are in UG/L, but all other N based parameters are in MG/L
+# Convert Nitrite and Nitrate to MG/L - will need same units for Nitrogen stuff later in process...
+      
+      df_standards <- df_standards %>% 
+            mutate(standard = as.numeric(standard)) %>% 
+            mutate(standard = ifelse(
+                  substance_name %in% c("NITRITE", "NITRATE") & unit_name == "UG/L",
+                  standard / 1000, standard)
+            ) %>% 
+            # mutate(standard = as.character(standard)) # Because I don't know about down-stream
+            mutate(standard = as.numeric(standard)) # Because I don't know about down-stream
+      
+      df_standards <- df_standards %>% 
+
+            mutate(unit_name = ifelse(
+                  substance_name %in% c("NITRITE", "NITRATE") & unit_name == "UG/L",
+                  "MG/L", unit_name)
+            ) 
+      
+      
+      # Remove Duplicate E COLI
+      df_standards <- df_standards %>% filter(!grepl("MPN/100", unit_name))
+      
+      
+      return(df_standards)
+      
+}
