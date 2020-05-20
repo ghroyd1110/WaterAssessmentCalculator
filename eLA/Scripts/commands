@@ -1,6 +1,0 @@
- 8039  rm -rf qb
- 8041  rm -rf az_views
- 8042  ln -s ../../data/qb qb
- 8043  ln -s ../../data/az_views az_views
- 8044  ln -s ../../data/rds rds
-
