@@ -15,7 +15,6 @@
 start_time <- Sys.time()
 
 # Load packages - install package if not already installed
-library(dataRetrieval) 
 library(tidyverse) 
 library(lubridate)
 library(RODBC)
@@ -24,13 +23,13 @@ library(RODBC)
 options(scipen = 999)
 
 # Set up directory
-setwd("C:/Users/65942/Desktop/rta 20200323")
+setwd("C:/Users/65942/Desktop/rta 20200508")
 
 # Pick date range
 startDate <- as.Date("2016-07-01")
 endDate <- as.Date("2021-06-30")
 
-# Static file for testing...remove if want live data
+# # Static file for testing...remove if want live data
 # ZAZDATA <- read_csv("inputs/ZAZDATA.csv", col_types = cols(ActivityStartDate = col_date(format = "%Y-%m-%d")))
 # a.azdata <- ZAZDATA
 # 
@@ -40,18 +39,207 @@ endDate <- as.Date("2021-06-30")
 # Pull live WQX data for date range and sites from www.waterqualitydata.us based on inputs, US:04 is Arizona. See webservice page for more info on filtering options.
 # Add data from intrastate waters.  These are waters that share a state boundry and is looked up manually.  Map at www.waterqualitydata.us has monitornig locations for interstate waters.
 # 
-a.azstreamdata <- readWQPdata(statecode = "US:04", startDate = startDate, endDate = endDate, siteType = "Stream")
-a.azlakedata <- readWQPdata(statecode = "US:04", startDate = startDate, endDate = endDate, siteType = "Lake, Reservoir, Impoundment")
-a.azdata <- rbind(a.azstreamdata, a.azlakedata)
-a.usgssites <- c("USGS-09421500", "USGS-09423000", "USGS-09423500", "USGS-09423550", "USGS-09423560", "USGS-09427520", "USGS-09429100", "USGS-09429490", "USGS-09429500", "USGS-09522000", "USGS-09521100", "USGS-09429600")
-a.intrastate <- readWQPdata(siteid = a.usgssites, startDate = startDate, endDate = endDate)
-a.azdata <- rbind(a.intrastate, a.azdata)
+# a.azstreamdata <- readWQPdata(statecode = "US:04", startDate = startDate, endDate = endDate, siteType = "Stream")
+# a.azlakedata <- readWQPdata(statecode = "US:04", startDate = startDate, endDate = endDate, siteType = "Lake, Reservoir, Impoundment")
+# a.azdata <- rbind(a.azstreamdata, a.azlakedata)
+# a.usgssites <- c("USGS-09421500", "USGS-09423000", "USGS-09423500", "USGS-09423550", "USGS-09423560", "USGS-09427520", "USGS-09429100", "USGS-09429490", "USGS-09429500", "USGS-09522000", "USGS-09521100", "USGS-09429600")
+# a.intrastate <- readWQPdata(siteid = a.usgssites, startDate = startDate, endDate = endDate)
+# a.azdata <- rbind(a.intrastate, a.azdata)
+# write.csv(a.azdata, "inputs/ZAZDATA.csv") # work off most current for testing
+# 
+# a.azsites <- whatWQPsites(statecode = "US:04", startDate = startDate, endDate = endDate)
+# write.csv(a.azsites, "inputs/ZAZSITES.csv")
+# epa.endtime <-Sys.time()
+
+# USGS Colorado River Results
+
+# Create temp file
+temp <- tempfile()
+
+a.usgssites <- "&siteid=USGS-09421500&siteid=USGS-09423000&siteid=USGS-09423500&siteid=USGS-09423550&siteid=USGS-09423560&siteid=USGS-09427520&siteid=USGS-09429100&siteid=USGS-09429490&siteid=USGS-09429500&siteid=USGS-09522000&siteid=USGS-09521100&siteid=USGS-09429600"
+
+# Download zip
+url <- paste0("https://www.waterqualitydata.us/data/Result/search?", a.usgssites, "&startDateLo=07-01-2016&startDateHi=06-30-2021&mimeType=csv&zip=yes")
+download.file(url ,temp, mode="wb")
+
+# Column Mapping
+
+# Extract and put in data frame
+a.usgs <- read_csv(unz(temp, "result.csv"),
+                   col_types = cols(OrganizationIdentifier = col_character(), 
+                                    OrganizationFormalName = col_character(), 
+                                    ActivityIdentifier = col_character(), 
+                                    ActivityTypeCode = col_character(),
+                                    ActivityMediaName = col_character(),
+                                    ActivityMediaSubdivisionName = col_skip(),
+                                    ActivityStartDate = col_date(format = "%Y-%m-%d"), 
+                                    `ActivityStartTime/Time` = col_character(),
+                                    `ActivityEndTime/TimeZoneCode` = col_skip(),
+                                    `ActivityDepthHeightMeasure/MeasureValue` = col_double(),
+                                    `ActivityDepthHeightMeasure/MeasureUnitCode` = col_character(),
+                                    ActivityDepthAltitudeReferencePointText = col_skip(),
+                                    `ActivityTopDepthHeightMeasure/MeasureValue` = col_skip(),
+                                    `ActivityTopDepthHeightMeasure/MeasureUnitCode` = col_skip(),
+                                    `ActivityBottomDepthHeightMeasure/MeasureValue` = col_skip(),
+                                    `ActivityBottomDepthHeightMeasure/MeasureUnitCode` = col_skip(),
+                                    ProjectIdentifier = col_skip(),
+                                    ActivityConductingOrganizationText = col_character(),
+                                    MonitoringLocationIdentifier = col_character(),
+                                    ActivityCommentText = col_character(),
+                                    HydrologicCondition = col_character(),
+                                    HydrologicEvent = col_skip(),
+                                    `SampleCollectionMethod/MethodIdentifier` = col_skip(),
+                                    `SampleCollectionMethod/MethodIdentifierContext` = col_skip(),
+                                    `SampleCollectionMethod/MethodName` = col_skip(),
+                                    SampleCollectionEquipmentName = col_skip(),
+                                    ResultDetectionConditionText = col_character(),
+                                    CharacteristicName = col_character(),
+                                    ResultSampleFractionText = col_character(),
+                                    ResultMeasureValue = col_double(),
+                                    `ResultMeasure/MeasureUnitCode` = col_character(),
+                                    MeasureQualifierCode = col_character(),
+                                    ResultStatusIdentifier = col_skip(),
+                                    StatisticalBaseCode = col_skip(),
+                                    ResultValueTypeName = col_skip(),
+                                    ResultWeightBasisText = col_skip(),
+                                    ResultTemperatureBasisText = col_skip(),
+                                    ResultParticleSizeBasisText = col_character(),
+                                    PrecisionValue = col_skip(),
+                                    ResultCommentText = col_character(),
+                                    USGSPCode = col_skip(),
+                                    `ResultDepthHeightMeasure/MeasureValue` = col_skip(),
+                                    `ResultDepthHeightMeasure/MeasureUnitCode` = col_skip(),
+                                    ResultDepthAltitudeReferencePointText = col_skip(),
+                                    SubjectTaxonomicName = col_skip(),
+                                    SampleTissueAnatomyName = col_skip(),
+                                    `ResultAnalyticalMethod/MethodIdentifier` = col_character(),
+                                    `ResultAnalyticalMethod/MethodIdentifierContext`= col_character(),
+                                    `ResultAnalyticalMethod/MethodName` = col_character(),
+                                    MethodDescriptionText = col_character(),
+                                    LaboratoryName = col_skip(),
+                                    AnalysisStartDate = col_skip(),
+                                    ResultLaboratoryCommentText = col_skip(),
+                                    DetectionQuantitationLimitTypeName = col_character(),
+                                    `DetectionQuantitationLimitMeasure/MeasureValue` = col_double(),
+                                    `DetectionQuantitationLimitMeasure/MeasureUnitCode` = col_character(),
+                                    PreparationStartDate = col_skip(),
+                                    ProviderName = col_skip(),
+                                    SampleAquifer = col_skip(),
+                                    ResultTimeBasisText = col_skip()))
+
+unlink(temp)
+
+# Streams and Lakes
+
+# Create temp file
+temp <- tempfile()
+
+# Download zip
+url <- "https://www.waterqualitydata.us/data/Result/search?statecode=US%3A04&siteType=Lake%2C%20Reservoir%2C%20Impoundment&siteType=Stream&startDateLo=07-01-2016&startDateHi=06-30-2021&mimeType=csv&zip=yes"
+download.file(url ,temp, mode="wb")
+
+# Column Mapping
+
+# Extract and put in data frame
+a.azstream <- read_csv(unz(temp, "result.csv"),
+                       col_types = cols(OrganizationIdentifier = col_character(), 
+                                        OrganizationFormalName = col_character(), 
+                                        ActivityIdentifier = col_character(), 
+                                        ActivityTypeCode = col_character(),
+                                        ActivityMediaName = col_character(),
+                                        ActivityMediaSubdivisionName = col_skip(),
+                                        ActivityStartDate = col_date(format = "%Y-%m-%d"), 
+                                        `ActivityStartTime/Time` = col_character(),
+                                        `ActivityEndTime/TimeZoneCode` = col_skip(),
+                                        `ActivityDepthHeightMeasure/MeasureValue` = col_double(),
+                                        `ActivityDepthHeightMeasure/MeasureUnitCode` = col_character(),
+                                        ActivityDepthAltitudeReferencePointText = col_skip(),
+                                        `ActivityTopDepthHeightMeasure/MeasureValue` = col_skip(),
+                                        `ActivityTopDepthHeightMeasure/MeasureUnitCode` = col_skip(),
+                                        `ActivityBottomDepthHeightMeasure/MeasureValue` = col_skip(),
+                                        `ActivityBottomDepthHeightMeasure/MeasureUnitCode` = col_skip(),
+                                        ProjectIdentifier = col_skip(),
+                                        ActivityConductingOrganizationText = col_character(),
+                                        MonitoringLocationIdentifier = col_character(),
+                                        ActivityCommentText = col_character(),
+                                        HydrologicCondition = col_character(),
+                                        HydrologicEvent = col_skip(),
+                                        `SampleCollectionMethod/MethodIdentifier` = col_skip(),
+                                        `SampleCollectionMethod/MethodIdentifierContext` = col_skip(),
+                                        `SampleCollectionMethod/MethodName` = col_skip(),
+                                        SampleCollectionEquipmentName = col_skip(),
+                                        ResultDetectionConditionText = col_character(),
+                                        CharacteristicName = col_character(),
+                                        ResultSampleFractionText = col_character(),
+                                        ResultMeasureValue = col_double(),
+                                        `ResultMeasure/MeasureUnitCode` = col_character(),
+                                        MeasureQualifierCode = col_character(),
+                                        ResultStatusIdentifier = col_skip(),
+                                        StatisticalBaseCode = col_skip(),
+                                        ResultValueTypeName = col_skip(),
+                                        ResultWeightBasisText = col_skip(),
+                                        ResultTemperatureBasisText = col_skip(),
+                                        ResultParticleSizeBasisText = col_character(),
+                                        PrecisionValue = col_skip(),
+                                        ResultCommentText = col_character(),
+                                        USGSPCode = col_skip(),
+                                        `ResultDepthHeightMeasure/MeasureValue` = col_skip(),
+                                        `ResultDepthHeightMeasure/MeasureUnitCode` = col_skip(),
+                                        ResultDepthAltitudeReferencePointText = col_skip(),
+                                        SubjectTaxonomicName = col_skip(),
+                                        SampleTissueAnatomyName = col_skip(),
+                                        `ResultAnalyticalMethod/MethodIdentifier` = col_character(),
+                                        `ResultAnalyticalMethod/MethodIdentifierContext`= col_character(),
+                                        `ResultAnalyticalMethod/MethodName` = col_character(),
+                                        MethodDescriptionText = col_character(),
+                                        LaboratoryName = col_skip(),
+                                        AnalysisStartDate = col_skip(),
+                                        ResultLaboratoryCommentText = col_skip(),
+                                        DetectionQuantitationLimitTypeName = col_character(),
+                                        `DetectionQuantitationLimitMeasure/MeasureValue` = col_double(),
+                                        `DetectionQuantitationLimitMeasure/MeasureUnitCode` = col_character(),
+                                        PreparationStartDate = col_skip(),
+                                        ProviderName = col_skip(),
+                                        SampleAquifer = col_skip(),
+                                        ResultTimeBasisText = col_skip()))
+
+unlink(temp)
+
+# Bind rows
+a.azdata <- rbind(a.azstream, a.usgs)
+
+# Rename columns with / to .
+a.azdata <- a.azdata %>% 
+  rename(ActivityStartTime.Time = `ActivityStartTime/Time`, 
+         ActivityStartTime.TimeZoneCode = `ActivityStartTime/TimeZoneCode`,
+         ActivityEndTime.Time = `ActivityEndTime/Time`,
+         ActivityDepthHeightMeasure.MeasureValue = `ActivityDepthHeightMeasure/MeasureValue`,
+         ActivityDepthHeightMeasure.MeasureUnitCode = `ActivityDepthHeightMeasure/MeasureUnitCode`,
+         ResultMeasure.MeasureUnitCode = `ResultMeasure/MeasureUnitCode`,
+         ResultAnalyticalMethod.MethodIdentifier = `ResultAnalyticalMethod/MethodIdentifier`,
+         ResultAnalyticalMethod.MethodIdentifierContext = `ResultAnalyticalMethod/MethodIdentifierContext`,
+         ResultAnalyticalMethod.MethodName = `ResultAnalyticalMethod/MethodName`,
+         DetectionQuantitationLimitMeasure.MeasureValue = `DetectionQuantitationLimitMeasure/MeasureValue`,
+         DetectionQuantitationLimitMeasure.MeasureUnitCode = `DetectionQuantitationLimitMeasure/MeasureUnitCode`)
+
+# Download AZ sites from portal
+
+# Create temp file
+temp <- tempfile()
+
+# Download zip
+url <- "https://www.waterqualitydata.us/data/Station/search?statecode=US%3A04&startDateLo=07-01-2016&startDateHi=06-30-2021&mimeType=csv&zip=yes"
+download.file(url ,temp, mode="wb")
+
+# Column Mapping
+
+# Extract and put in data frame
+a.azsites <- read_csv(unz(temp, "station.csv"))
+
+unlink(temp)
+
 write.csv(a.azdata, "inputs/ZAZDATA.csv") # work off most current for testing
-
-a.azsites <- whatWQPsites(statecode = "US:04", startDate = startDate, endDate = endDate)
 write.csv(a.azsites, "inputs/ZAZSITES.csv")
-epa.endtime <-Sys.time()
-
 
 
 
@@ -95,19 +283,19 @@ b.ph <- b.ph %>%
 # Add in pH hydrogen ion data to dataset
 b.azdata <- bind_rows(b.azdata, b.ph)
 
+# Select fields for removed records
+r.select <- c("WBID", "OrganizationIdentifier", "ActivityStartDate", "ActivityDepthHeightMeasure.MeasureValue", "MonitoringLocationIdentifier", "ResultDetectionConditionText", "CharacteristicName", "ResultMeasureValue", "ResultMeasure.MeasureUnitCode", "ResultCommentText", "DetectionQuantitationLimitTypeName", "DetectionQuantitationLimitMeasure.MeasureValue", "DetectionQuantitationLimitMeasure.MeasureUnitCode", "removereason")
+
+# Removed Records Documentation
+r.tribal <- b.azdata %>% 
+  filter(OrganizationIdentifier %in% c("AK-CHIN_WQX", "COCOPAH_INDIAN", "CRITEPO_WQX", "FMYN_WQX", "HOPI_WQX", "KBOPWQP", "QUECHAN_WQX", "SRPMIC", "SRPMIC_WQX", "WHITEMOUNTAIN_WQX", "WMAT_WQX", "YAN_WQX")) %>% 
+  mutate(WBID = NA) %>% 
+  mutate(removereason = "Tribal") %>% 
+  select(r.select)
+
 # Exclude Tribal Data
-b.azdata <- filter(b.azdata, OrganizationIdentifier != "AK-CHIN_WQX" &
-                     OrganizationIdentifier != "COCOPAH_INDIAN" &
-                     OrganizationIdentifier != "CRITEPO_WQX" &
-                     OrganizationIdentifier != "FMYN_WQX" &
-                     OrganizationIdentifier != "HOPI_WQX" &
-                     OrganizationIdentifier != "KBOPWQP" &
-                     OrganizationIdentifier != "QUECHAN_WQX" &
-                     OrganizationIdentifier != "SRPMIC" &
-                     OrganizationIdentifier != "SRPMIC_WQX" &
-                     OrganizationIdentifier != "WHITEMOUNTAIN_WQX" &
-                     OrganizationIdentifier != "WMAT_WQX" &
-                     OrganizationIdentifier != "YAN_WQX")
+b.azdata <- b.azdata %>% 
+  filter(!OrganizationIdentifier %in% c("AK-CHIN_WQX", "COCOPAH_INDIAN", "CRITEPO_WQX", "FMYN_WQX", "HOPI_WQX", "KBOPWQP", "QUECHAN_WQX", "SRPMIC", "SRPMIC_WQX", "WHITEMOUNTAIN_WQX", "WMAT_WQX", "YAN_WQX"))
 
 
 
@@ -121,8 +309,18 @@ ZSTDUNIT <- read_csv("inputs/ZSTDUNIT.csv")
 # Join STDUNIT to azdata.  This standardizes units and resolves issues with speciation
 c.stddata <- left_join(b.azdata, ZSTDUNIT, by = "ResultMeasure.MeasureUnitCode")
 
+# Removed Records Documentation
+r.unit <- c.stddata %>% 
+  filter(STDUNIT == "remove") %>% 
+  mutate(WBID = NA) %>% 
+  mutate(removereason = "Unit") %>% 
+  select(r.select)
+
 # Remove any data with newunit = remove.  Some parameters like TKN are in mg/kg.  This removes those units
 c.stddata <- filter(c.stddata, STDUNIT != "remove" | is.na(STDUNIT))
+
+# Remove any sediment data not picked up by unit filter
+c.stddata <- filter(c.stddata, ActivityMediaName == "Water" | ActivityMediaName == "Other")
 
 # Apply Conversion.  This standardizes results to common units.
 c.stddata <- mutate(c.stddata, STDResult = ResultMeasureValue * Conversion)
@@ -201,6 +399,32 @@ c.nowbid <- c.nowbid %>%
   select(MonitoringLocationIdentifier, OrganizationIdentifier.x, LatitudeMeasure, LongitudeMeasure, ActivityIdentifier, MonitoringLocationDescriptionText) %>%
   distinct(MonitoringLocationIdentifier, .keep_all = TRUE)
 
+# Make field that shows duplicate data (same site, date, time, parameter, fraction, depth, result) and exclude
+c.stddata$concate <- paste(c.stddata$WBID, c.stddata$CharacteristicName, c.stddata$ResultSampleFractionText, c.stddata$ActivityStartDate, c.stddata$ActivityStartTime.Time, c.stddata$ActivityDepthHeightMeasure.MeasureValue, c.stddata$ResultMeasureValue, c.stddata$ActivityTypeCode, c.stddata$MonitoringLocationIdentifier)
+
+# Document removed duplicates
+r.duplicated <- c.stddata %>% 
+  mutate(diff = duplicated(concate)) %>% 
+  filter(diff == "TRUE") %>% 
+  mutate(removereason = "Duplicate") %>%
+  mutate(WBID = NA) %>% 
+  select(r.select)
+
+# Find Duplicate data (same site, date, time, parameter, fraction, depth, result) and exclude
+c.stddata <- c.stddata %>% 
+  mutate(diff = duplicated(concate)) %>% 
+  filter(diff != "TRUE")
+
+# Need to ensure antijoin and inner join work properly
+YSITESALL <- YSITESALL %>% 
+  distinct(MonitoringLocationIdentifier, .keep_all = TRUE)
+
+# Removed Records Documentation
+r.nowbid <- anti_join(c.stddata, YSITESALL, by = "MonitoringLocationIdentifier") %>% 
+  mutate(WBID = NA) %>% 
+  mutate(removereason = "No WBID") %>% 
+  select(r.select)
+
 # Associate WQX data with WBID from DEQ database.  Innerjoin because only want data from c.stddata with WBID.
 c.stddata <- inner_join(c.stddata, YSITESALL, by = "MonitoringLocationIdentifier")
 
@@ -233,12 +457,28 @@ c.stddata <- mutate(c.stddata, ndorresult = ifelse(STDResult == 999999, "nondete
 # Keep the result if it exists if not replace with half detection limit
 c.stddata <- within(c.stddata, STDResult[ndorresult == "nondetect"] <- (halfdl[ndorresult == "nondetect"])) 
 
+# Remove Records Documentation
+r.nodetect <- c.stddata %>% 
+  filter(ResultDetectionConditionText == "Not Detected") %>% 
+  filter(is.na(DetectionQuantitationLimitMeasure.MeasureValue)) %>% 
+  mutate(removereason = "Not Detected and no DL value") %>% 
+  select(r.select)
+
+# Filter out any data that is missing detection limits and is not detected
+c.stddata <- c.stddata %>% 
+  mutate(temp = ifelse(ResultDetectionConditionText == "Not Detected" & is.na(DetectionQuantitationLimitMeasure.MeasureValue), "remove", "keep")) %>% 
+  filter(temp != "remove" | is.na(temp))
+
 # Make Total Recoverable Fraction = Total
 c.stddata[grep("Total Recoverable", c.stddata$ResultSampleFractionText), "ResultSampleFractionText"] <- "Total" 
 c.stddata[grep("Recoverable", c.stddata$ResultSampleFractionText), "ResultSampleFractionText"] <- "Total" 
 
+# Impute dissolved if hardness fraction type is null.  Common issue with USGS data
+c.stddata <- c.stddata %>% 
+  mutate(ResultSampleFractionText = ifelse(CharacteristicName == "Hardness, Ca, Mg" & is.na(ResultSampleFractionText), "Dissolved", ResultSampleFractionText))
+
 # Join site data with results
-c.stddata <- left_join(c.stddata, b.azsites, by = "MonitoringLocationIdentifier")
+c.stddata <- left_join(c.stddata, b.azsites, by = c("MonitoringLocationIdentifier", "OrganizationIdentifier"))
 
 # Change Lake, Reservoir, Impoundment to lake and river/stream to stream
 c.stddata[grep("Lake, Reservoir, Impoundment", c.stddata$MonitoringLocationTypeName), "MonitoringLocationTypeName"] <- "Lake" 
@@ -248,12 +488,38 @@ c.stddata[grep("River/Stream", c.stddata$MonitoringLocationTypeName), "Monitorin
 c.stddata <- c.stddata %>% 
   mutate(ActivityDepthHeightMeasure.MeasureValue = ifelse(is.na(ActivityDepthHeightMeasure.MeasureValue) & MonitoringLocationTypeName != "Lake", 0, ActivityDepthHeightMeasure.MeasureValue)) 
 
+# Some organizations use just oxygen not dissolved oxygen.  Use common CharacteristicName.
+c.stddatao2 <- c.stddata %>% filter(CharacteristicName == "Oxygen")
+c.stddata <- c.stddata %>% filter(CharacteristicName != "Oxygen")
+
+# Crosswalk dissolved oxygen data
+c.stddatao2[grep("mg/l", c.stddatao2$ResultMeasure.MeasureUnitCode), "CharacteristicName"] <- "Dissolved oxygen (DO)"
+c.stddatao2[grep("% saturatn", c.stddatao2$ResultMeasure.MeasureUnitCode), "CharacteristicName"] <- "Dissolved oxygen saturation"
+
+# Some organizations use different nutrient names.  Convert to common schema.
+c.stddata[grep("Nitrogen, mixed forms ", c.stddata$CharacteristicName), "CharacteristicName"] <- "Nitrogen"
+
+# Combine oxygen subset back to main dataset
+c.stddata <- bind_rows(c.stddata,c.stddatao2)
+
+# Removed Records Documentation
+r.oxygenmgl <- c.stddata %>% 
+  filter(CharacteristicName == "Dissolved oxygen (DO)") %>%  
+  filter(ActivityDepthHeightMeasure.MeasureValue > 1 | is.na(ActivityDepthHeightMeasure.MeasureValue)) %>%
+  filter(MonitoringLocationTypeName == "Lake") %>% 
+  mutate(removereason = "Oxygen") %>% 
+  select(r.select)
+
+r.oxygenper <- c.stddata %>% 
+  filter(CharacteristicName == "Dissolved oxygen saturation") %>%  
+  filter(ActivityDepthHeightMeasure.MeasureValue > 1 | is.na(ActivityDepthHeightMeasure.MeasureValue)) %>%
+  filter(MonitoringLocationTypeName == "Lake") %>% 
+  mutate(removereason = "Oxygen") %>% 
+  select(r.select)
+
 # Remove all Dissolved Oxygen that is > 1 m in depth for a lake.  1.0 m would be included per R18-11-109.
 c.stddata <- filter(c.stddata, ActivityDepthHeightMeasure.MeasureValue <= 1 | MonitoringLocationTypeName != "Lake" | CharacteristicName != "Dissolved oxygen (DO)")
 c.stddata <- filter(c.stddata, ActivityDepthHeightMeasure.MeasureValue <= 1 | MonitoringLocationTypeName != "Lake" | CharacteristicName != "Dissolved oxygen saturation")
-
-# Remove % for units for just SSC
-c.stddata <- c.stddata %>% filter(!(ResultMeasure.MeasureUnitCode == "%" & CharacteristicName == "Suspended sediment concentration (SSC)")) # Note the placement of the ! allows exclusion of multiple columns.
 
 # Filter out QC data.  First create a list of possible QC options.
 c.ActivityTypeCode <- c("Quality Control Sample-Field Replicate",
@@ -269,14 +535,24 @@ c.ActivityTypeCode <- c("Quality Control Sample-Field Replicate",
                         "Quality Control Field Replicate Msr/Obs",
                         "Sample-Integrated Vertical Profile")
 
+# Removed Records Documentation
+r.qc <- c.stddata %>% 
+  filter(ActivityTypeCode %in% c.ActivityTypeCode) %>% 
+  mutate(removereason = "QC") %>% 
+  select(r.select)
+
 # Then filter out by that list
 c.stddata <- c.stddata %>% filter(!(ActivityTypeCode %in% c.ActivityTypeCode))
 
 # Resolve any missing organizations
 c.stddata <- c.stddata %>% 
-  mutate(ActivityConductingOrganizationText = ifelse(is.na(ActivityConductingOrganizationText), OrganizationIdentifier.x, ActivityConductingOrganizationText))
+  mutate(ActivityConductingOrganizationText = ifelse(is.na(ActivityConductingOrganizationText), OrganizationIdentifier, ActivityConductingOrganizationText))
 
-# Filter out data that is not credible.  Note: For the 2022 Assessment this will adjusted to a blackout date approach.
+# Removed Records Documentation
+r.notcredible <- c.stddata %>% 
+  filter(ActivityConductingOrganizationText == "Friends of the Santa Cruz River, Tubac, AZ", ActivityStartDate < "2019-04-19") %>% 
+  mutate(removereason = "Not Credible") %>% 
+  select(r.select)
 
 # Step 1 Subset the portion that is credible
 c.stddata.p1 <- c.stddata %>% 
@@ -288,26 +564,28 @@ c.stddata.p2 <- c.stddata %>%
 
 c.stddata <- bind_rows(c.stddata.p1, c.stddata.p2)
 
+# Removed Records Documentation
+r.usgsnotcredible <- c.stddata %>% 
+  filter((WBID == "15010004-001B" & CharacteristicName == "Selenium")) %>% # USGS indicated not credible
+  mutate(removereason = "Not Credible") %>% 
+  select(r.select)
+
 # One off for USGS
 c.stddata <- c.stddata %>% 
   filter(!(WBID == "15010004-001B" & CharacteristicName == "Selenium")) # USGS indicated not credible
-
-# Some organizations use just oxygen not dissolved oxygen.  Use common CharacteristicName.
-c.stddatao2 <- c.stddata %>% filter(CharacteristicName == "Oxygen")
-c.stddata <- c.stddata %>% filter(CharacteristicName != "Oxygen")
-
-# Crosswalk dissolved oxygen data
-c.stddatao2[grep("mg/l", c.stddatao2$ResultMeasure.MeasureUnitCode), "CharacteristicName"] <- "Dissolved oxygen (DO)"
-c.stddatao2[grep("% saturatn", c.stddatao2$ResultMeasure.MeasureUnitCode), "CharacteristicName"] <- "Dissolved oxygen saturation"
-
-# Combine oxygen subset back to main dataset
-c.stddata <- bind_rows(c.stddata,c.stddatao2)
 
 # Add column to identify 'not for listing' flag.  This will be used to later exclude data with this field that has an exceedance
 c.stddata <- c.stddata %>% mutate(nfl = "N")
 
 # Identify all NFL in one easy to read column.
 c.stddata[grep("NFL", c.stddata$ResultCommentText), "nfl"] <- "Y"
+c.stddata[grep("E4|E8", c.stddata$ResultCommentText), "nfl"] <- "N"
+
+# Removed Records Documentation
+r.nfl <- c.stddata %>% 
+  filter(nfl == "Y") %>% 
+  mutate(removereason = "nfl") %>% 
+  select(r.select)
 
 # Filter out data that was flagged 'not for listing'
 c.stddata <- c.stddata %>% 
@@ -321,14 +599,30 @@ c.stddata <- c.stddata %>%
 ZIMPROVEMENTS <- read_csv("inputs/ZIMPROVEMENTS.csv", 
                           col_types = cols(improvementdate = col_date(format = "%m/%d/%Y")))
 
+# Removed Records Documentation
+r.improve <- c.stddata %>% 
+  left_join(ZIMPROVEMENTS, by = "WBID") %>% 
+  mutate(improvexclude = ifelse(ActivityStartDate < improvementdate, "Y", "N")) %>% 
+  filter(improvexclude == "Y") %>%
+  mutate(removereason = "Improvement") %>% 
+  select(r.select)
+
 # Join to dataset then exclude improved data
 c.stddata <- c.stddata %>% 
   left_join(ZIMPROVEMENTS, by = "WBID") %>% 
   mutate(improvexclude = ifelse(ActivityStartDate < improvementdate, "Y", "N")) %>% 
   filter(improvexclude != "Y" | is.na(improvexclude))
 
+c.stddata$concate <- paste(c.stddata$WBID, c.stddata$CharacteristicName, c.stddata$ResultSampleFractionText, c.stddata$ActivityStartDate, c.stddata$ActivityStartTime.Time, c.stddata$ActivityDepthHeightMeasure.MeasureValue, c.stddata$ResultMeasureValue, c.stddata$ActivityTypeCode, c.stddata$MonitoringLocationIdentifier)
+
+# Removed Records Documentation
+r.duplicated <- c.stddata %>% 
+  mutate(diff = duplicated(concate)) %>% 
+  filter(diff == "TRUE") %>% 
+  mutate(removereason = "Duplicate") %>% 
+  select(r.select)
+
 # Find Duplicate data (same site, date, time, parameter, fraction, depth, result) and exclude
-c.stddata$concate <- paste(c.stddata$WBID, c.stddata$CharacteristicName, c.stddata$ResultSampleFractionText, c.stddata$ActivityStartDate, c.stddata$ActivityStartDateTime, c.stddata$ActivityDepthHeightMeasure.MeasureValue, c.stddata$ResultMeasureValue, c.stddata$ActivityTypeCode, c.stddata$MonitoringLocationIdentifier)
 c.stddata <- c.stddata %>% 
   mutate(diff = duplicated(concate)) %>% 
   filter(diff != "TRUE")
@@ -367,6 +661,8 @@ c.sscsp <- c.sscsp %>%
 # Add back to dataset
 c.stddata <- bind_rows(c.stddata, c.sscsp)
 
+c.stddata <- c.stddata %>% select(WBID, ActivityStartDate, MonitoringLocationIdentifier, CharacteristicName, ResultDetectionConditionText, ResultSampleFractionText, STDResult, STDUNIT, STDDETECTLIMIT, STDDETECTUNIT, everything())
+
 # Narrow to just fields needed.  Always follow format of WBID, USE, Parameter
 c.stddata2 <- select(c.stddata,
                      WBID,
@@ -379,7 +675,7 @@ c.stddata2 <- select(c.stddata,
                      STDResult,
                      STDDETECTLIMIT,
                      STDDETECTUNIT,
-                     OrganizationIdentifier.x,
+                     OrganizationIdentifier,
                      ActivityConductingOrganizationText,
                      ResultCommentText,
                      ResultAnalyticalMethod.MethodIdentifier,
@@ -527,10 +823,6 @@ d.usejoin3 <- d.usejoin3 %>%
 
 # Add dissolved data with no total pairs back to dataset
 d.usejoin <- rbind(d.usejoin, d.usejoin3)
-
-# Create list of non-detects to later (f.exceed) exclude if there is an exceedance
-d.dlagg <- d.usejoin %>% 
-  filter(ndorresult == "nondetect") 
 
 # Need to account for situations where in the same 7 days there are dl issues and not dl issues.  Do this with distinct.
 d.dlagg <- d.usejoin %>% 
@@ -728,7 +1020,7 @@ e.coregather <- select(e.coregather, WBID, aggdate, ResultSampleFractionText, Ch
 # Limits to just core parameter that are for the correct use
 e.coregather <- filter(e.coregather, Core == "Y")
 
-# Seasonal distribution.  Identify seasons.
+# Identify the core parameters we have taking into account aggregation
 e.corehave <- e.coregather %>% 
   group_by(WBID, ResultSampleFractionText, CharacteristicName, Use, aggdate = floor_date(aggdate, "quarter"), Core) %>%
   summarize(corepresent = max(core)) 
@@ -740,7 +1032,7 @@ ZDEQUSESCORE <- ZDEQUSES %>%
   filter(code == "Y") %>% 
   select(-code)
 
-# Get full list of core parameters
+# Get full list of core parameters needed
 e.coreneed <- e.corehave %>% 
   ungroup() %>% 
   select(-ResultSampleFractionText, -CharacteristicName, -Core, -corepresent) %>% 
@@ -750,7 +1042,7 @@ e.coreneed <- e.corehave %>%
 e.coreneed <- e.coreneed %>% 
   full_join(ZCORE, by = "Use")
 
-# Prepare to add site specific nutrient 
+# Prepare to add site specific nutrients 
 e.coreneed$fractionandchar <- paste(e.coreneed$ResultSampleFractionText, e.coreneed$CharacteristicName, sep = "zzz") 
 
 # Select for just what is needed get ready for spread to ID all core have's
@@ -812,6 +1104,7 @@ e.season <- e.corecomp3 %>%
 
 e.season[is.na(e.season)] <- 0.2
 
+# Determines if at least one sample collected (.2 + .2 + .2 + .2 = .8 so not a keeper)
 e.season <- e.season %>% 
   mutate(keepers = spring + summer + fall + winter) %>% 
   filter(keepers >= 1.1)
@@ -869,6 +1162,19 @@ e.corecomp6 <- e.corecomp5 %>%
 
 e.corecomp6$Coreandseason[is.na(e.corecomp6$Coreandseason)] <- "N"
 
+# Combine Removed Data
+
+# Align datatypes
+r.nowbid$WBID <- as.numeric(r.nowbid$WBID)
+r.nowbid$ActivityDepthHeightMeasure.MeasureValue <- as.numeric(r.nowbid$ActivityDepthHeightMeasure.MeasureValue)
+
+r.tribal$WBID <- as.numeric(r.tribal$WBID)
+r.tribal$ActivityDepthHeightMeasure.MeasureValue <- as.numeric(r.tribal$ActivityDepthHeightMeasure.MeasureValue)
+
+r.unit$WBID <- as.numeric(r.unit$WBID)
+r.unit$ActivityDepthHeightMeasure.MeasureValue <- as.numeric(r.unit$ActivityDepthHeightMeasure.MeasureValue)
+r.all <- bind_rows(r.nodetect, r.duplicated, r.improve, r.nfl, r.notcredible, r.oxygenmgl, r.oxygenper, r.usgsnotcredible, r.nowbid, r.qc, r.tribal, r.unit)
+
 
 
 
@@ -890,8 +1196,11 @@ f.stdtypejoin <- f.stdtypejoin %>% drop_na(WBID)
 # This table is the map for DEQ WQDB uses to uses listed in rule/assessments
 ZUSECROSSWALK2 <- read_csv("inputs/ZUSECROSSWALK2.csv")
 
-# Put DEQ WQDB standards in long format so join can happen
+# Put DEQ PROVISIONAL WQDB standards in long format so join can happen
 ZDEQSTANDARDS <- read_csv("inputs/ZDEQSTANDARDS.csv")
+
+# Nitrate/ite don't from standard table to characteristic name fix
+ZDEQSTANDARDS[grep("NITROGEN \\(NITRATE AND NITRITE\\), INORGANIC", ZDEQSTANDARDS$SUBSTANCE_NAME), "SUBSTANCE_NAME"] <- "INORGANIC NITROGEN (NITRATE AND NITRITE)" 
 
 # Gather standards
 f.gatheredstds <- gather(ZDEQSTANDARDS, STDUSE, STD, -SUBSTANCE_NAME, -SUBSTANCE_CAS_NO, -ResultSampleFractionText, -Unit)
@@ -923,7 +1232,6 @@ f1.stdregular <- f1.stdregular %>%
   select(-SUBSTANCE_CAS_NO) %>% 
   mutate(SUBSTANCE_CAS_NO = "None")
 
-
 # Select the same fields to prep for rbind
 f1.stdregular <- select(f1.stdregular, 
                         WBID,
@@ -944,39 +1252,39 @@ f1.stdregular <- filter(f1.stdregular, !is.na(Exceed))
 
 # 2 - Oxygen Standards
 f2.stdoxygen <- f.stdtypejoin %>% 
-  filter(CharacteristicName == "OXYGEN" | CharacteristicName == "DISSOLVED OXYGEN SATURATION" | CharacteristicName == "DISSOLVED OXYGEN (DO)") %>% 
+  filter(CharacteristicName == "DISSOLVED OXYGEN SATURATION" | CharacteristicName == "DISSOLVED OXYGEN (DO)") %>% 
   filter(ResultSampleFractionText == "Dissolved")
 
-# Combine the multiple DO names
+# Filter for AW use
 f2.stdoxygen <- filter(f2.stdoxygen, grepl("AW", NewUse, fixed = TRUE))
 f2.stdoxygen <- filter(f2.stdoxygen, grepl("Chronic", NewUse, fixed = TRUE)) # Chronic is arbitrary and picked here so the full 5 years of data is pulled.  Acute pulls 3.
 f2.stdoxygen <- filter(f2.stdoxygen, NewUse != "AWEAcute") # Exclude AWE...no standards for ephemerals
 
 # Pair/spread %sat and oxygen concentration 
-f2.stdoxygengather <- spread(f2.stdoxygen, CharacteristicName, aggtimespace)
+f2.stdoxygen <- spread(f2.stdoxygen, CharacteristicName, aggtimespace)
 
 # Join for use map
-f2.joinstdoxygen <- inner_join(f2.stdoxygengather, ZUSECROSSWALK2, by = "NewUse")
+f2.joinstdoxygen <- inner_join(f2.stdoxygen, ZUSECROSSWALK2, by = "NewUse")
 
 # Switch Use back to Acute...that is how it is entered in the standards table
 f2.joinstdoxygen[grep("AWC_CHRONIC_MAX", f2.joinstdoxygen$STDUSE), "STDUSE"] <- "AWC_ACUTE_MIN"
 f2.joinstdoxygen[grep("AWEDW_CHRONIC_MAX", f2.joinstdoxygen$STDUSE), "STDUSE"] <- "AWEDW_ACUTE_MIN"
 f2.joinstdoxygen[grep("AWW_CHRONIC_MAX", f2.joinstdoxygen$STDUSE), "STDUSE"] <- "AWW_ACUTE_MIN"
 
-# Rename mg/L to join
-f2.joinstdoxygen <- rename(f2.joinstdoxygen, aggtimespace = `DISSOLVED OXYGEN (DO)`) 
+# Format, Add Standards, Determine if Standards Met
+f2.joinstdoxygen <- f2.joinstdoxygen %>% 
+  rename(aggtimespace = `DISSOLVED OXYGEN (DO)`) %>%  
+  mutate(CharacteristicName = "DISSOLVED OXYGEN (DO)") %>%  
+  left_join(f.gatheredstds, by = c("CharacteristicName", "STDUSE")) %>% 
+  select(-ResultSampleFractionText.y) %>% 
+  rename(ResultSampleFractionText = ResultSampleFractionText.x) %>% 
+  rename(STDNEW2 = STD) %>% # do is already in mg/L so no need to create new column
+  mutate(Exceed = ifelse(aggtimespace < STDNEW2, "Yes", "No")) %>% 
+  drop_na(aggtimespace)
 
-# Add column with DO characteristic name
-f2.joinstdoxygen$CharacteristicName <- "DISSOLVED OXYGEN (DO)" 
-
-# Join for characteristic name map
-f2.joinstdoxygen <- left_join(f2.joinstdoxygen, f.gatheredstds, by = c("CharacteristicName", "STDUSE"))
-f2.joinstdoxygen <- select(f2.joinstdoxygen, -ResultSampleFractionText.y)
-f2.joinstdoxygen <- rename(f2.joinstdoxygen, ResultSampleFractionText = ResultSampleFractionText.x)
-
-# Identify if Standards Met
-f2.joinstdoxygen <- rename(f2.joinstdoxygen, STDNEW2 = STD) # do is already in mg/L so no need to create new column
-f2.joinstdoxygen <- mutate(f2.joinstdoxygen, Exceed = ifelse(aggtimespace < STDNEW2, "Yes", "No")) 
+# Remove any rows where % saturation is na but has a yes for exceeds 
+f2.joinstdoxygen <- f2.joinstdoxygen %>% 
+  filter(Exceed != "Yes" | !is.na(`DISSOLVED OXYGEN SATURATION`))
 
 f2.joinstdoxygen$Exceed[f2.joinstdoxygen$`DISSOLVED OXYGEN SATURATION` >= 90] <- "No"  
 f2.joinstdoxygen$STD <- 999999.9
@@ -1761,7 +2069,8 @@ f8.ecoligeo <- filter(d.usejoin, CharacteristicName == "ESCHERICHIA COLI") # no 
 f8.ecoligeo <- filter(f8.ecoligeo, Use == "FBC" | Use == "PBC")
 
 # Use median of duplicate.  Basically aggregation by day with time so that duplicate samples don't overweight samples.
-f8.ecoligeo <- f8.ecoligeo %>% group_by(WBID, MonitoringLocationIdentifier, ActivityStartTime.Time, aggdate = floor_date(ActivityStartDate, "1 day"), CharacteristicName, ResultSampleFractionText, NewUse) %>%
+f8.ecoligeo <- f8.ecoligeo %>% 
+  group_by(WBID, MonitoringLocationIdentifier, ActivityStartTime.Time, aggdate = floor_date(ActivityStartDate, "1 day"), CharacteristicName, ResultSampleFractionText, NewUse) %>%
   summarize(ecoli = median(STDResult))
 
 # Roll up to Waterbody based on Worst Case
@@ -1820,6 +2129,10 @@ f.dlissues <- f.exceed %>%
 
 # now just exclude values where exceed = Yes and countdl not na.  Just exceedances with no detection limit issues.  
 f.exceed <- filter(f.exceed, !Exceed == "Yes" | is.na(countdl))
+
+# F9 TDS.  TDS standards flow weighted annual mean for the Colorado River
+# No need to code unless there are actual exceedances.  As on 5/22/2020 there were none.  Would need to be able to pull in flows from NWIS for full automation. 
+# Also need to confirm that TDS standards apply to point locations not reaches.
 
 
 
@@ -1882,7 +2195,7 @@ h.assessnotbi$Assessed[is.na(h.assessnotbi$Assessed)] <- "Not enough information
 h.assessnotbi <- h.assessnotbi %>% 
   mutate(totalsampneed = 3)
 
-# Exclude where impairment/attainment decision already made
+# No extra samples needed if impairment/attainment decision already made
 h.assessnotbi <- h.assessnotbi %>% mutate(actualsampneed = totalsampneed - sampcount)
 
 h.assessnotbi[grep("Meeting criteria|Not meeting criteria", h.assessnotbi$Assessed), "actualsampneed"] <- 0
@@ -1894,11 +2207,17 @@ h.assessbi <- filter(h.assess, binomial == "Yes")
 # Opens binomial table
 ZBINOMIAL <- read_csv("inputs/ZBINOMIAL.csv") 
 
+# Note could do the table in code for impairment using the following base r code.  Would have to exclude the first 19 and then deal with inconclusives and attaining.
+# NumberExceed <- 5
+# TotalSamples <- 20
+# Probability <- .1 # This is for the 90% confidence of a 10% exceedance rate
+# pbinom(q = NumberExceed - 1, size = TotalSamples, prob = Probability)
+
 h.assessbi <- inner_join(h.assessbi, ZBINOMIAL, by = c("sampcount" = "NumSamp"))
 
 h.assessbi$Yes <- as.numeric(h.assessbi$Yes)
 
-# Replace na's for number columns.  Can't replace all na's (ex. # exceedance < 4 is na not 0)
+# Replace na's for number columns.  
 h.assessbi$Yes[is.na(h.assessbi$Yes)] <- 0
 h.assessbi$No[is.na(h.assessbi$No)] <- 0
 h.assessbi$sampcount[is.na(h.assessbi$sampcount)] <- 0
@@ -1954,7 +2273,7 @@ ZATTAINSPARAMETERMAP <- read_csv("inputs/ZATTAINSPARAMETERMAP.csv")
 ZATTAINSUSE <- read_csv("inputs/ZATTAINSUSE.csv")
 ZATTAINSUSE <- rename(ZATTAINSUSE, PARAM_USE_NAME = USE_NAME)
 
-# Add WBID, Characteristic name mapping and use mapping
+# Most recent ATTAINS parameter file. Add WBID, Characteristic name mapping and use mapping
 ATTAINSPARAMETERS <- ATTAINSPARAMETERS %>% 
   mutate(ASSESSMENT_UNIT_IDCOPY = ASSESSMENT_UNIT_ID) %>% 
   separate(ASSESSMENT_UNIT_IDCOPY, c("a", "b"), sep = "_") %>% 
@@ -1978,7 +2297,6 @@ h.assessall2 <- h.assessall %>%
   mutate(existimpair = ifelse(PARAM_ATTAINMENT_CODE == "Not meeting criteria", "Existing Impairment", "No")) %>% 
   mutate(existimpair = replace(existimpair, is.na(existimpair), "No"))  
   
-  
 # See what is different between automated assessment and ATTAINS so logic easier to apply
 h.assessall2 <- h.assessall2 %>% 
   mutate(newassessattains = replace(newassessattains, newassessattains == 2, "Meeting criteria")) %>% 
@@ -2001,7 +2319,6 @@ h.assessall2 <- h.assessall2 %>%
 ## Depends #1 The 426 meeting criteria attains but inconclusive deq will be split by binomial/exceedances.   
 # non binomial all if any exceedance then DEQ, else attains.
 # if binomial then # samples and # exceedances considered...should be < 10 samples then attains...> 10 = deq 
-
 h.assessall2 <- h.assessall2 %>% 
   mutate(combinedassessed = ifelse(newassessattains == "Meeting criteria" & PARAM_ATTAINMENT_CODE == "Not enough information", newassessattains, 
                                    ifelse(newassessattains == "Meeting criteria" & PARAM_ATTAINMENT_CODE == "Not meeting criteria", newassessattains, 
@@ -2119,13 +2436,13 @@ human <- read_csv("human.csv")
 # Make a backup
 file.copy("human.csv", paste("humancopies/humancopy", format(Sys.Date(), "%Y-%m-%d"), "csv", sep = "."))
 
-# Select fields
+# Select fields.  Basically just the key fields and the provisional fields.  Remove automated fields.
 human <- human %>% select(WBID, NewUse, Use, CharacteristicName, provassess, provdate, provcomment, provdatetext)
 
 # Remove any duplicates.  The acute/chronic will be resolved at this point.  Rolled up values take the chronic first.
 human <- human[!duplicated(human[,c("WBID", "NewUse", "Use", "CharacteristicName")]),]
 
-# Full join human data to automatically calculated data
+# Full join human data to automatically calculated data.
 human <- full_join(h.diff.compare, human, by = c("WBID", "NewUse", "Use", "CharacteristicName"))
 
 # Makes more readable.  Reevaluate is a sign for the assessment specialist to review the data because of a change since last run.
@@ -2430,7 +2747,6 @@ i.maxuse <- i.human %>%
 
 # Use 3 then 2 (just core) then 1.  So Not meeting criteria = Entire Use Not supporting (3), then all core parameters present then use supporting (2) then inconclusive (1)
 # min/max provassess used because the fish consumption designated use uses mercury as a core parameter which does not have a water column standard just a fish tissue standard.  Bring in the core parameter for fish from e.corecomp6
-
 i.use <- i.human %>% 
   filter(Core == "Y") %>% 
   group_by(WBID, WATERBODY_DESC, Use) %>%
@@ -2687,7 +3003,7 @@ write.csv(i.newdelist, "outputs/NEWDELIST.csv")
 
 
 
-#### J - METRICS ####
+#### J - REPORTS AND METRICS ####
 
 
 
@@ -3262,11 +3578,12 @@ j.datagapgis5 <- j.datagapgis4 %>%
   mutate(longitude = ifelse(is.na(longitude), LONGITUDE_MEASURE, longitude)) %>% 
   mutate(DatagapSite = ifelse(is.na(DatagapSite), STATION_CD, DatagapSite)) %>% 
   mutate(WATERBODY_DESC = ifelse(is.na(WATERBODY_DESC), STATION_ALT_NAME, WATERBODY_DESC)) %>% 
-  select(WBID, WATERBODY_DESC, monitoringpriority, latitude, longitude, Flowstatus, Ownership, STATION_ACCESS, googledirections, DriveMinutes, HikeMinutes, Restrictions, DatagapNumbersamples, DatagapSite, DatagapNeeds, SourceIDSites, SourceIDNeeds, PotentialDelist, Champion, Decision, type)
+  select(WBID, WATERBODY_DESC, monitoringpriority, latitude, longitude, Flowstatus, Ownership, STATION_ACCESS, googledirections, DriveMinutes, HikeMinutes, Restrictions, DatagapNumbersamples, DatagapSite, DatagapNeeds, SourceIDSites, SourceIDNeeds, PotentialDelist, Champion, Decision, type) %>% 
+  drop_na(latitude)
 
 # # Make a Record
-# write.csv(j.datagapgis5, "J:/WQD/Surface Water Section/SAMPLING/Datagaps/datagapsgis.csv", row.names = FALSE)
-# write.csv(j.datagapgis5, "S:/common/wqd/DataGaps/datagapsgis.csv", row.names = FALSE)
+write.csv(j.datagapgis5, "J:/WQD/Surface Water Section/SAMPLING/Datagaps/datagapsgis.csv", row.names = FALSE)
+write.csv(j.datagapgis5, "S:/common/wqd/DataGaps/datagapsgis.csv", row.names = FALSE)
 
 # Meghan's volunteer metric.  Captures basically datagap5 with a date field filtered for just volunteers
 j.voldatagap <- j.orggather %>% 
@@ -3339,19 +3656,6 @@ j.wbassign <- j.assign %>%
 
 j.assignall <- bind_cols(j.paramassign, j.useassign, j.wbassign)
 
-# Open full file so dates/rows can be added each time code is run for snapshot of % complete
-Assigned_Parameters <- read_csv("outputs/Assigned Parameters.csv", col_types = cols(X1 = col_skip(), date = col_date(format = "%Y-%m-%d"), percentcompleteuse = col_character()))
-Assigned_Uses <- read_csv("outputs/Assigned Uses.csv", col_types = cols(X1 = col_skip(), date = col_date(format = "%Y-%m-%d"), percentcompleteuse = col_character()))
-Assigned_Waterbodies <- read_csv("outputs/Assigned Waterbodies.csv", col_types = cols(X1 = col_skip(), date = col_date(format = "%Y-%m-%d"), percentcompleteuse = col_character()))
-
-# Combine old table with current 
-j.ap <- bind_rows(Assigned_Parameters, j.paramassign)
-j.au <- bind_rows(Assigned_Uses, j.useassign)
-j.aw <- bind_rows(Assigned_Waterbodies, j.wbassign)
-
-write.csv(j.ap, "outputs/Assigned Parameters.csv")
-write.csv(j.au, "outputs/Assigned Uses.csv")
-write.csv(j.aw, "outputs/Assigned Waterbodies.csv")
 
 end_time <- Sys.time()
 end_time - start_time
@@ -3412,6 +3716,7 @@ j.reporta %>%
   distinct(WBID, Use, DecisionUse) %>% 
   group_by(Use, DecisionUse) %>% 
   summarise(Count = n()) %>% 
+  filter(DecisionUse %in% c("Insufficient information", "Not supporting", "Supporting")) %>% 
   ggplot(aes(x = reorder(Use, Count), y = Count, fill = DecisionUse, color = DecisionUse)) +
     geom_col(alpha = 0.6) +
     coord_flip() +
@@ -3453,33 +3758,33 @@ c.stddata2 %>%
 # close(conn)
 
 # Join to c.sites to show WBID
-FISH <- FISH %>% 
-  left_join(c.sites, by = c("STATION_CD" = "SiteID"))
-
-# Summarize Fish Results by Waterbody, Fish and Just Mercury...expand to more parameters if needed.
-FISH2 <- FISH %>%
-  filter(SUBSTANCE_NAME == "MERCURY") %>%
-  mutate(STDDETLIM = ifelse(is.na(DETECTION_LIMIT), 0.012, DETECTION_LIMIT)) %>% 
-  mutate(STDRESULT = ifelse(is.na(LAB_RESULT), STDDETLIM/2, LAB_RESULT)) %>% 
-  select(WBID, STATION_ALT_NAME, ACTIVITY_END_DATE, FINALID, LAB_QA_FLAGS, SUBSTANCE_NAME, LAB_RESULT, LAB_RESULT_UNIT, STDRESULT, STDDETLIM, DETECTION_LIMIT, DETECTION_LIMIT_UNIT) 
-
-# Do the advisory based on current criteria.  Need 5 or more fish.  Red = Do not eat, Orange = Limit Consumption, Green is Unlimited Consumption, Yellow is Inconclusive  
-FISHAdvisory <- FISH2 %>% 
-  group_by(WBID, FINALID) %>% 
-  summarise(count = n(), lastdate = max(ACTIVITY_END_DATE), max = max(STDRESULT), mean = mean(STDRESULT), sd = sd(STDRESULT), meanminussd = mean(STDRESULT)-sd(STDRESULT), meanplussd = mean(STDRESULT)+sd(STDRESULT)) %>% 
-  left_join(ZWATERBODYNAME, by = "WBID") %>% 
-  rename(Species = FINALID) %>% 
-  mutate(automatedadvisory = ifelse(max > 2, "Red",
-                           ifelse(count >= 5 & mean >= 0.75, "Red",
-                                  ifelse(count >= 5 & mean + sd > 0.3, "Orange",
-                                         ifelse(count >= 5 & mean - sd < 0.3, "Green", "Yellow")))))
-
-# Load Existing Fish Advisories
-ZFISHADVISORIES <- read_csv("inputs/ZFISHADVISORIES.csv")
-
-# Any Differences?
-FISHDifferences <- FISHAdvisory %>% 
-  full_join(ZFISHADVISORIES, by = c("WBID", "Species"))
+# FISH <- FISH %>% 
+#   left_join(c.sites, by = c("STATION_CD" = "SiteID"))
+# 
+# # Summarize Fish Results by Waterbody, Fish and Just Mercury...expand to more parameters if needed.
+# FISH2 <- FISH %>%
+#   filter(SUBSTANCE_NAME == "MERCURY") %>%
+#   mutate(STDDETLIM = ifelse(is.na(DETECTION_LIMIT), 0.012, DETECTION_LIMIT)) %>% 
+#   mutate(STDRESULT = ifelse(is.na(LAB_RESULT), STDDETLIM/2, LAB_RESULT)) %>% 
+#   select(WBID, STATION_ALT_NAME, ACTIVITY_END_DATE, FINALID, LAB_QA_FLAGS, SUBSTANCE_NAME, LAB_RESULT, LAB_RESULT_UNIT, STDRESULT, STDDETLIM, DETECTION_LIMIT, DETECTION_LIMIT_UNIT) 
+# 
+# # Do the advisory based on current criteria.  Need 5 or more fish.  Red = Do not eat, Orange = Limit Consumption, Green is Unlimited Consumption, Yellow is Inconclusive  
+# FISHAdvisory <- FISH2 %>% 
+#   group_by(WBID, FINALID) %>% 
+#   summarise(count = n(), lastdate = max(ACTIVITY_END_DATE), max = max(STDRESULT), mean = mean(STDRESULT), sd = sd(STDRESULT), meanminussd = mean(STDRESULT)-sd(STDRESULT), meanplussd = mean(STDRESULT)+sd(STDRESULT)) %>% 
+#   left_join(ZWATERBODYNAME, by = "WBID") %>% 
+#   rename(Species = FINALID) %>% 
+#   mutate(automatedadvisory = ifelse(max > 2, "Red",
+#                            ifelse(count >= 5 & mean >= 0.75, "Red",
+#                                   ifelse(count >= 5 & mean + sd > 0.3, "Orange",
+#                                          ifelse(count >= 5 & mean - sd < 0.3, "Green", "Yellow")))))
+# 
+# # Load Existing Fish Advisories
+# ZFISHADVISORIES <- read_csv("inputs/ZFISHADVISORIES.csv")
+# 
+# # Any Differences?
+# FISHDifferences <- FISHAdvisory %>% 
+#   full_join(ZFISHADVISORIES, by = c("WBID", "Species"))
 
 # # Output to Fish Folder
 # write.csv(FISHDifferences, paste0("J:/WQD/Surface Water Section/Monitoring Unit/Fish/Automated Fish Advisories R/FishAdvisories",Sys.Date(),".csv"))
