@@ -326,24 +326,6 @@ c.stddata <- filter(c.stddata, ActivityMediaName == "Water" | ActivityMediaName 
 c.stddata <- mutate(c.stddata, STDResult = ResultMeasureValue * Conversion)
 
 # # Connect to ADEQ Water Quality Database *** Don't share ***
-# conn <- odbcConnect("com", uid="waq_readonly", pwd="waqr3ad")
-# 
-# # Check connection object is open.
-# odbcGetInfo(conn)
-# 
-# # Query the database and put the results into the data frame
-# YSTA_STATION <- sqlQuery(conn,"select * from STA_STATION", rows_at_time = 1,believeNRows = FALSE)
-# YSW_SITES <- sqlQuery(conn,"select * from VW_SW_SITES", rows_at_time = 1,believeNRows = FALSE)
-# YUSGS_SITES <- sqlQuery(conn,"select * from VW_USGS_WATERBODY_HUC_REACH", rows_at_time = 1,believeNRows = FALSE)
-# YWBHUCREACH <- sqlQuery(conn,"select * from VW_WATERBODY_HUC_REACH", rows_at_time = 1,believeNRows = FALSE) # going to use this later for lake acres and stream miles also uses
-# 
-# write.csv(YSTA_STATION, "inputs/YSTA_STATION.csv", row.names = FALSE)
-# write.csv(YSW_SITES, "inputs/YSW_SITES.csv", row.names = FALSE)
-# write.csv(YUSGS_SITES, "inputs/YUSGS_SITES.csv", row.names = FALSE)
-# write.csv(YWHUCREACH <- "inputs/YWBHUCREACH.csv", row.names = FALSE)
-# 
-# #Close connection object.
-# close(conn)
 
 
 # Get current site information from the ADEQ Water Quality Database through ODBC.
@@ -3745,17 +3727,6 @@ c.stddata2 %>%
           legend.title = element_blank())
 
 # #### TEMP FISH ####
-# # Open connection object.
-# conn <- odbcConnect("com", uid="waq_readonly", pwd="waqr3ad")
-# 
-# # Check connection object is open.
-# odbcGetInfo(conn)
-# 
-# # Query the database and put the results into the data frame
-# FISH <- sqlQuery(conn,"select * from VW_FISH_QUERY", rows_at_time = 1,believeNRows = FALSE)
-# 
-# #Close connection object.
-# close(conn)
 
 # Join to c.sites to show WBID
 # FISH <- FISH %>% 
